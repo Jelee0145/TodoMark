@@ -46,7 +46,7 @@ export function TopBar() {
         >
           <LogoMark size={34} className="shrink-0 text-ink" />
           <span className="serif text-[20px] text-ink" style={{ letterSpacing: '-0.4px' }}>
-            NOTE ONE
+            TodoMark
           </span>
         </div>
 

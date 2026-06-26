@@ -3,6 +3,7 @@ out/
 dist/
 build_installer/
 release/
+release2/
 *.tsbuildinfo
 *.db
 *.log

@@ -48,7 +48,7 @@ function createWindow(): BrowserWindow {
     transparent: true,
     backgroundColor: '#00000000',
     autoHideMenuBar: true,
-    title: 'NOTE ONE',
+    title: 'TodoMark',
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -95,7 +95,7 @@ function createTray(): void {
   const iconPath = join(__dirname, '../../resources/icon.png')
   const img = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(img)
-  tray.setToolTip('NOTE ONE')
+  tray.setToolTip('TodoMark')
   const menu = Menu.buildFromTemplate([
     {
       label: '显示主窗口',

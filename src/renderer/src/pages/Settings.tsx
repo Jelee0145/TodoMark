@@ -244,7 +244,7 @@ export function SettingsPage() {
             <LogoMark size={52} className="shrink-0 text-ink" />
             <div className="min-w-0">
               <div className="serif text-[22px] text-ink" style={{ letterSpacing: '-0.4px' }}>
-                NOTE ONE
+                TodoMark
               </div>
               <div className="text-[13px] text-ash mt-1">
                 本地优先的时间管理 · 应用使用统计、Markdown 笔记与待办提醒
@@ -252,7 +252,7 @@ export function SettingsPage() {
             </div>
           </Card>
           <div className="hidden">
-            NOTE ONE · 本地优先的时间管理
+            TodoMark · 本地优先的时间管理
           </div>
         </div>
       </div>

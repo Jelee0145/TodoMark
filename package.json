@@ -1,7 +1,7 @@
 {
-  "name": "note-one",
-  "version": "0.1.0",
-  "description": "NOTE ONE - 应用使用时长统计看板 + Markdown 笔记 + 待办提醒",
+"name": "todomark",
+"version": "0.1.0",
+"description": "TodoMark - 应用使用时长统计看板 + Markdown 笔记 + 待办提醒",
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",

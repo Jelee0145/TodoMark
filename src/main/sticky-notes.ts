@@ -53,7 +53,7 @@ function openStickyNote(noteId: string): void {
     transparent: true,
     backgroundColor: '#00000000',
     autoHideMenuBar: true,
-    title: 'NOTE ONE Sticky Note',
+    title: 'TodoMark Sticky Note',
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),

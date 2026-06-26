@@ -1,5 +1,5 @@
-appId: com.noteone.app
-productName: NOTE ONE
+appId: com.tomark.app
+productName: TodoMark
 copyright: Copyright © 2025
 directories:
   output: dist
@@ -24,7 +24,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: NOTE ONE
+  shortcutName: TodoMark
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
   installerHeaderIcon: resources/icon.ico

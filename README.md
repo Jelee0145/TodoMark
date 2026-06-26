@@ -1,4 +1,4 @@
-# NOTE ONE
+# TodoMark
 
 > 桌面记事本应用 — 看清时间花在哪，顺手记下想法与待办
 
@@ -100,7 +100,7 @@ npm run rebuild      # 重新编译原生模块
 
 构建产物在 `dist/` 目录：
 
-- `NOTE ONE Setup 0.1.0.exe` — NSIS 安装包（含自定义安装目录选项）
+- `TodoMark Setup 0.1.0.exe` — NSIS 安装包（含自定义安装目录选项）
 - `win-unpacked/` — 免安装绿色版
 
 ## 许可
