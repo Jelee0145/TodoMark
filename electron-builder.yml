@@ -1,15 +1,32 @@
 appId: com.noteone.app
 productName: NOTE ONE
+copyright: Copyright © 2025
 directories:
   output: dist
   buildResources: resources
 files:
   - out/**/*
   - package.json
+extraResources:
+  - from: resources/
+    to: resources/
+    filter:
+      - "**/*"
 win:
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
   icon: resources/icon.ico
+  artifactName: "${productName} Setup ${version}.${ext}"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: NOTE ONE
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
+  license: LICENSE.txt
+  runAfterFinish: true
