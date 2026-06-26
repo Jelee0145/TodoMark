@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const stickyWindows = new Map<string, BrowserWindow>()
 
@@ -12,8 +13,9 @@ function loadStickyRoute(win: BrowserWindow, noteId: string): void {
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${route}`)
   } else {
-    const filePath = join(__dirname, '../renderer/index.html').replace(/\\/g, '/')
-    win.loadURL(`file://${filePath}#${route}`)
+    const filePath = join(__dirname, '../renderer/index.html')
+    const fileUrl = pathToFileURL(filePath).href
+    win.loadURL(`${fileUrl}#${route}`)
   }
 }
 
