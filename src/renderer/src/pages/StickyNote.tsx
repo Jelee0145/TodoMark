@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import MDEditor from '@uiw/react-md-editor'
 import { Icon } from '@renderer/components/ui/Icon'
 import type { Note } from '@shared/types'
 
 export function StickyNotePage() {
-  const noteId = window.location.hash.replace(/^#\/sticky-note\//, '')
-  const id = decodeURIComponent(noteId)
+  const params = useParams<{ noteId: string }>()
+  const id = params.noteId ? decodeURIComponent(params.noteId) : ''
   const [note, setNote] = useState<Note | null>(null)
   const [loading, setLoading] = useState(true)
   const [alwaysOnTop, setAlwaysOnTop] = useState(true)

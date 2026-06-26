@@ -12,7 +12,8 @@ function loadStickyRoute(win: BrowserWindow, noteId: string): void {
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${route}`)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: route })
+    const filePath = join(__dirname, '../renderer/index.html').replace(/\\/g, '/')
+    win.loadURL(`file://${filePath}#${route}`)
   }
 }
 

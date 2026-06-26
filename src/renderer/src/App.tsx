@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useMatch } from 'react-router-dom'
 import { TopBar } from './components/ui/TopBar'
 import { ToastHost } from './components/ui/Toast'
 import { SuccessCheckHost } from './components/ui/SuccessCheck'
@@ -13,8 +13,8 @@ import { todoReminderPath } from './lib/todo-route'
 
 export default function App() {
   const navigate = useNavigate()
-  const location = useLocation()
-  const isStickyRoute = location.pathname.startsWith('/sticky-note/')
+  const stickyMatch = useMatch('/sticky-note/:noteId')
+  const isStickyRoute = !!stickyMatch
   const loadPaused = useUsageStore((s) => s.loadPaused)
   const [maximized, setMaximized] = useState(false)
 

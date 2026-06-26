@@ -2,6 +2,7 @@ node_modules/
 out/
 dist/
 build_installer/
+release/
 *.tsbuildinfo
 *.db
 *.log
