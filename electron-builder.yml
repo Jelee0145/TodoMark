@@ -8,10 +8,10 @@ files:
   - out/**/*
   - package.json
 extraResources:
-  - from: resources/
-    to: resources/
-    filter:
-      - "**/*"
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/icon.ico
+    to: icon.ico
 win:
   target:
     - target: nsis

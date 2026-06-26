@@ -54,7 +54,7 @@ function openStickyNote(noteId: string): void {
     backgroundColor: '#00000000',
     autoHideMenuBar: true,
     title: 'TodoMark Sticky Note',
-    icon: join(__dirname, '../../resources/icon.png'),
+    icon: join(process.resourcesPath, 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false,

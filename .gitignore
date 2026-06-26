@@ -4,6 +4,9 @@ dist/
 build_installer/
 release/
 release2/
+dist/
+dist_v2/
+dist_v3/
 *.tsbuildinfo
 *.db
 *.log

@@ -49,7 +49,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#00000000',
     autoHideMenuBar: true,
     title: 'TodoMark',
-    icon: join(__dirname, '../../resources/icon.png'),
+    icon: join(process.resourcesPath, 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false,
@@ -92,7 +92,7 @@ function createWindow(): BrowserWindow {
 }
 
 function createTray(): void {
-  const iconPath = join(__dirname, '../../resources/icon.png')
+  const iconPath = join(process.resourcesPath, 'icon.png')
   const img = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(img)
   tray.setToolTip('TodoMark')
