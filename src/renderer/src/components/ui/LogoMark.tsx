@@ -8,7 +8,7 @@ interface Props {
 export function LogoMark({ size = 32, className = '' }: Props) {
   return (
     <img
-      src="/logo.png"
+      src="./logo.png"
       width={size}
       height={size}
       className={className}
