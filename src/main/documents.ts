@@ -235,6 +235,7 @@ export function registerDocumentIpc(
   ipcMain.handle('documents:scanWorkspace', (_event, id: string) => scanWorkspace(id))
   ipcMain.handle('documents:list', (_event, workspaceId?: string) => db.listMarkdownDocuments(workspaceId))
   ipcMain.handle('documents:recent', (_event, limit?: number) => db.listRecentMarkdownDocuments(limit))
+  ipcMain.handle('documents:forget', (_event, path: string) => db.forgetMarkdownDocument(path))
   ipcMain.handle('documents:import', async (event) => {
     const result = await showOpenDialog(senderWindow(event), {
       title: '导入 Markdown 文档',

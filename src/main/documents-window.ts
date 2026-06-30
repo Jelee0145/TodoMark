@@ -7,10 +7,10 @@ let documentWindow: BrowserWindow | null = null
 
 function loadDocumentRoute(win: BrowserWindow): void {
   if (process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/documents`)
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/documents/read`)
   } else {
     const fileUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).href
-    win.loadURL(`${fileUrl}#/documents`)
+    win.loadURL(`${fileUrl}#/documents/read`)
   }
 }
 

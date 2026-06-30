@@ -114,13 +114,19 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 0 9px 0 13px;
+  padding: 0 10px 0 14px;
   border: 0;
   border-radius: 9px 9px 0 0;
   background: transparent;
   color: var(--color-graphite);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.009em;
   cursor: pointer;
+  transition: background 120ms ease;
+}
+.document-tab:hover {
+  background: rgba(255, 255, 255, 0.55);
 }
 .document-tab > span:first-child {
   flex: 1;
@@ -136,21 +142,9 @@ body {
   display: grid;
   place-items: center;
   border-radius: 9999px;
+  transition: background 120ms ease;
 }
 .document-tab-close:hover {
-  background: var(--color-fog);
-}
-.document-action {
-  border: 0;
-  border-radius: 9999px;
-  padding: 5px 9px;
-  background: transparent;
-  color: var(--color-graphite);
-  font-size: 11px;
-  cursor: pointer;
-}
-.document-action:hover {
-  color: var(--color-ink);
   background: var(--color-fog);
 }
 .document-crepe {
@@ -163,10 +157,12 @@ body {
 }
 .document-crepe .milkdown {
   min-height: 100%;
-  max-width: 900px;
   margin: 0 auto;
   padding: 42px 64px 120px;
   background: var(--color-pure-white);
+}
+.document-crepe--narrow .milkdown {
+  max-width: 720px;
 }
 .document-crepe .ProseMirror {
   min-height: calc(100vh - 260px);

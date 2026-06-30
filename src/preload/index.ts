@@ -105,6 +105,8 @@ const api = {
       ipcRenderer.invoke('documents:list', workspaceId),
     recent: (limit?: number): Promise<MarkdownDocument[]> =>
       ipcRenderer.invoke('documents:recent', limit),
+    forget: (path: string): Promise<void> =>
+      ipcRenderer.invoke('documents:forget', path),
     import: (): Promise<MarkdownDocument[]> => ipcRenderer.invoke('documents:import'),
     read: (path: string): Promise<MarkdownDocumentContent> =>
       ipcRenderer.invoke('documents:read', path),
@@ -192,8 +194,7 @@ if (process.contextIsolated) {
     console.error('preload expose failed:', err)
   }
 } else {
-  // @ts-ignore allow direct attach when not isolated
-  window.api = api
+  ;(window as unknown as { api: typeof api }).api = api
 }
 
 export type Api = typeof api

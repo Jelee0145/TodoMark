@@ -9,20 +9,21 @@ import { TodosPage } from './pages/Todos'
 import { SettingsPage } from './pages/Settings'
 import { StickyNotePage } from './pages/StickyNote'
 import { DocumentsPage } from './pages/Documents'
+import { DocumentLibraryPage } from './pages/DocumentLibrary'
 import { useUsageStore } from './store/usage'
 import { todoReminderPath } from './lib/todo-route'
 
 export default function App() {
   const navigate = useNavigate()
   const stickyMatch = useMatch('/sticky-note/:noteId')
-  const documentsMatch = useMatch('/documents')
+  const readerMatch = useMatch('/documents/read')
   const isStickyRoute = !!stickyMatch
-  const isDocumentsRoute = !!documentsMatch
+  const isReaderRoute = !!readerMatch
   const loadPaused = useUsageStore((s) => s.loadPaused)
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
-    if (isStickyRoute || isDocumentsRoute) return
+    if (isStickyRoute || isReaderRoute) return
     loadPaused()
     let off: (() => void) | undefined
     ;(async () => {
@@ -30,21 +31,21 @@ export default function App() {
       off = window.api.window.onMaximizeChange((m) => setMaximized(m))
     })()
     return () => off?.()
-  }, [isDocumentsRoute, isStickyRoute, loadPaused])
+  }, [isReaderRoute, isStickyRoute, loadPaused])
 
   useEffect(() => {
-    if (isStickyRoute || isDocumentsRoute) return
+    if (isStickyRoute || isReaderRoute) return
     return window.api.onTodoReminderOpen((payload) => {
       if (payload.todoId) navigate(todoReminderPath(payload.todoId))
     })
-  }, [isDocumentsRoute, isStickyRoute, navigate])
+  }, [isReaderRoute, isStickyRoute, navigate])
 
   useEffect(() => {
-    if (isStickyRoute || isDocumentsRoute) return
+    if (isStickyRoute || isReaderRoute) return
     return window.api.onNoteOpen((payload) => {
       navigate(`/notes?noteId=${encodeURIComponent(payload.noteId)}`)
     })
-  }, [isDocumentsRoute, isStickyRoute, navigate])
+  }, [isReaderRoute, isStickyRoute, navigate])
 
   if (isStickyRoute) {
     return (
@@ -54,10 +55,10 @@ export default function App() {
     )
   }
 
-  if (isDocumentsRoute) {
+  if (isReaderRoute) {
     return (
       <Routes>
-        <Route path="/documents" element={<DocumentsPage />} />
+        <Route path="/documents/read" element={<DocumentsPage />} />
       </Routes>
     )
   }
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/todos" element={<TodosPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/documents" element={<DocumentLibraryPage />} />
         </Routes>
       </main>
       <ToastHost />

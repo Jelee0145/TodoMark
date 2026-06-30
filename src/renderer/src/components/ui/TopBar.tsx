@@ -26,7 +26,8 @@ export function TopBar() {
   const navItems: { to: string; label: string; icon: IconName }[] = [
     { to: '/dashboard', label: '看板', icon: 'dashboard' },
     { to: '/notes', label: '笔记', icon: 'note' },
-    { to: '/todos', label: '待办', icon: 'check' }
+    { to: '/todos', label: '待办', icon: 'check' },
+    { to: '/documents', label: '文档', icon: 'layers' }
   ]
 
   const dragStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties
@@ -68,13 +69,6 @@ export function TopBar() {
               {it.label}
             </NavLink>
           ))}
-          <button
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[14px] font-medium text-graphite hover:text-ink hover:bg-fog transition-colors"
-            onClick={() => window.api.documents.openWindow()}
-          >
-            <Icon name="layers" size={16} strokeWidth={1.6} />
-            文档
-          </button>
         </nav>
 
         <div className="flex-1" />

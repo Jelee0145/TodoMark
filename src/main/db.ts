@@ -439,6 +439,10 @@ export function removeMarkdownDocument(path: string): void {
   db.prepare('DELETE FROM markdown_documents WHERE path = ?').run(path)
 }
 
+export function forgetMarkdownDocument(path: string): void {
+  db.prepare('UPDATE markdown_documents SET lastOpenedAt = 0 WHERE path = ?').run(path)
+}
+
 export function moveMarkdownDocumentPath(
   oldPath: string,
   document: Omit<MarkdownDocument, 'tags'>,
