@@ -193,6 +193,7 @@ export function TodosPage() {
   const beginNewChild = (groupId: string) => {
     setSelectedGroupId(groupId)
     setNewChildVisible(false)
+    setChildrenCollapsed((current) => without(current, groupId))
     setNewChild({ groupId, value: '', focusKey: Date.now() })
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => setNewChildVisible(true))
