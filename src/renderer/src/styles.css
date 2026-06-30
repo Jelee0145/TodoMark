@@ -726,7 +726,7 @@ body {
   gap: 12px;
   border-radius: 10px;
   padding: 5px 8px;
-  transition: background 150ms ease;
+  transition: background 150ms ease, transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .todo-child-row:hover {
   background: var(--color-fog);

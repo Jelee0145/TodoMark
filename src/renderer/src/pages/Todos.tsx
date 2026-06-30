@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTodosStore } from '@renderer/store/todos'
 import { Button } from '@renderer/components/ui/Button'
@@ -55,6 +55,8 @@ export function TodosPage() {
   const todoInputRef = useRef<HTMLInputElement>(null)
   const newChildInputRef = useRef<HTMLInputElement>(null)
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const childRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const childPositions = useRef<Map<string, number>>(new Map())
   const committing = useRef(new Set<string>())
 
   useEffect(() => {
@@ -68,11 +70,11 @@ export function TodosPage() {
   }, [newGroupTitle])
 
   useEffect(() => {
-    if (editingGroup) selectInput(groupInputRef.current)
+    if (editingGroup) focusInput(groupInputRef.current)
   }, [editingGroup?.id])
 
   useEffect(() => {
-    if (editingTodo) selectInput(todoInputRef.current)
+    if (editingTodo) focusInput(todoInputRef.current)
   }, [editingTodo?.id])
 
   useEffect(() => {
@@ -86,6 +88,39 @@ export function TodosPage() {
     }, 50)
     return () => window.clearTimeout(timer)
   }, [highlightedId, groups, todos])
+
+  useEffect(() => {
+    const doneIds = new Set(groups.filter((g) => g.done === 1).map((g) => g.id))
+    if (doneIds.size === 0) return
+    if (showDone) {
+      setOpeningGroups((current) => {
+        const next = new Set(current)
+        doneIds.forEach((id) => next.add(id))
+        return next
+      })
+      const handle = window.setTimeout(() => {
+        setOpeningGroups((current) => {
+          const next = new Set(current)
+          doneIds.forEach((id) => next.delete(id))
+          return next
+        })
+      }, 400)
+      return () => window.clearTimeout(handle)
+    }
+    setClosingGroups((current) => {
+      const next = new Set(current)
+      doneIds.forEach((id) => next.add(id))
+      return next
+    })
+    const handle = window.setTimeout(() => {
+      setClosingGroups((current) => {
+        const next = new Set(current)
+        doneIds.forEach((id) => next.delete(id))
+        return next
+      })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [showDone])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -104,6 +139,22 @@ export function TodosPage() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [editingGroup, newChild])
+
+  useLayoutEffect(() => {
+    const elements = Array.from(childRefs.current.entries())
+    elements.forEach(([id, el]) => {
+      const oldY = childPositions.current.get(id)
+      const newY = el.getBoundingClientRect().top
+      childPositions.current.set(id, newY)
+      if (oldY === undefined || Math.abs(oldY - newY) < 0.5) return
+      const dy = oldY - newY
+      el.style.transition = 'none'
+      el.style.transform = `translateY(${dy}px)`
+      void el.offsetHeight
+      el.style.transition = ''
+      el.style.transform = ''
+    })
+  }, [todos])
 
   const todosByGroup = useMemo(() => {
     const result = new Map<string, Todo[]>()
@@ -287,6 +338,9 @@ export function TodosPage() {
   }
 
   const handleToggleTodo = async (todo: Todo) => {
+    childRefs.current.forEach((el, id) => {
+      childPositions.current.set(id, el.getBoundingClientRect().top)
+    })
     try {
       await toggleTodo(todo)
       if (!todo.done) showSuccessCheck('已完成')
@@ -372,7 +426,13 @@ export function TodosPage() {
             )}
 
             {groups
-              .filter((group) => group.done === 0 || showDone)
+              .filter(
+                (group) =>
+                  group.done === 0 ||
+                  showDone ||
+                  closingGroups.has(group.id) ||
+                  completingGroups.has(group.id)
+              )
               .map((group, index) => {
               const items = todosByGroup.get(group.id) ?? []
               const completed = items.filter((todo) => todo.done === 1).length
@@ -413,7 +473,10 @@ export function TodosPage() {
                       checked={group.done === 1}
                       disabled={isCompleting}
                       label={group.done ? '标记未完成' : '完成全部待办'}
-                      onClick={() => handleToggleGroup(group)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleToggleGroup(group)
+                      }}
                     />
                     <div className="min-w-0 flex-1">
                       {editingGroup?.id === group.id ? (
@@ -474,8 +537,13 @@ export function TodosPage() {
                           <div
                             key={todo.id}
                             ref={(node) => {
-                              if (node) cardRefs.current.set(todo.id, node)
-                              else cardRefs.current.delete(todo.id)
+                              if (node) {
+                                cardRefs.current.set(todo.id, node)
+                                childRefs.current.set(todo.id, node)
+                              } else {
+                                cardRefs.current.delete(todo.id)
+                                childRefs.current.delete(todo.id)
+                              }
                             }}
                             className="todo-child-row group t-panel-slide"
                             data-open={
@@ -485,7 +553,10 @@ export function TodosPage() {
                             <CheckButton
                               checked={todo.done === 1}
                               label={todo.done ? '标记未完成' : '标记完成'}
-                              onClick={() => handleToggleTodo(todo)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleToggleTodo(todo)
+                              }}
                             />
                             {editingTodo?.id === todo.id ? (
                               <input
@@ -625,10 +696,9 @@ function CheckButton({
   )
 }
 
-function selectInput(input: HTMLInputElement | null): void {
+function focusInput(input: HTMLInputElement | null): void {
   if (!input) return
   input.focus()
-  input.select()
 }
 
 function without(values: Set<string>, value: string): Set<string> {
