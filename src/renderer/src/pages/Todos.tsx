@@ -47,6 +47,7 @@ export function TodosPage() {
   const [closingGroups, setClosingGroups] = useState<Set<string>>(new Set())
   const [openingTodos, setOpeningTodos] = useState<Set<string>>(new Set())
   const [closingTodos, setClosingTodos] = useState<Set<string>>(new Set())
+  const [completingGroups, setCompletingGroups] = useState<Set<string>>(new Set())
   const [newGroupVisible, setNewGroupVisible] = useState(false)
   const [newChildVisible, setNewChildVisible] = useState(false)
   const newGroupInputRef = useRef<HTMLInputElement>(null)
@@ -112,7 +113,12 @@ export function TodosPage() {
       items.push(todo)
       result.set(todo.groupId, items)
     }
-    result.forEach((items) => items.sort((left, right) => left.sort - right.sort))
+    result.forEach((items) =>
+      items.sort((left, right) => {
+        if (left.done !== right.done) return left.done - right.done
+        return left.sort - right.sort
+      })
+    )
     return result
   }, [todos])
 
@@ -250,23 +256,37 @@ export function TodosPage() {
   }
 
   const handleToggleGroup = async (group: TodoGroup) => {
-    if (!group.done && !showDone) {
-      setClosingGroups((current) => withValue(current, group.id))
-      await waitForMotion('--panel-close-dur', 350)
-    }
-    try {
+    if (completingGroups.has(group.id)) return
+
+    if (group.done) {
       await toggleGroup(group)
-      if (!group.done) showSuccessCheck('已完成')
+      return
+    }
+
+    const items = todosByGroup.get(group.id) ?? []
+    const remaining = items.filter((todo) => todo.done !== 1)
+    setCompletingGroups((current) => withValue(current, group.id))
+    try {
+      for (let i = 0; i < remaining.length; i++) {
+        const todo = remaining[i]
+        if (i > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 120))
+        await updateTodo(todo.id, { done: 1 })
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 200))
+      await toggleGroup(group)
+      showSuccessCheck('已完成')
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 200))
+      if (!showDone) {
+        setClosingGroups((current) => withValue(current, group.id))
+        await waitForMotion('--panel-close-dur', 350)
+      }
     } finally {
+      setCompletingGroups((current) => without(current, group.id))
       setClosingGroups((current) => without(current, group.id))
     }
   }
 
   const handleToggleTodo = async (todo: Todo) => {
-    if (!todo.done && !showDone) {
-      setClosingTodos((current) => withValue(current, todo.id))
-      await waitForMotion('--panel-close-dur', 350)
-    }
     try {
       await toggleTodo(todo)
       if (!todo.done) showSuccessCheck('已完成')
@@ -351,13 +371,16 @@ export function TodosPage() {
               </section>
             )}
 
-            {groups.map((group, index) => {
+            {groups
+              .filter((group) => group.done === 0 || showDone)
+              .map((group, index) => {
               const items = todosByGroup.get(group.id) ?? []
               const completed = items.filter((todo) => todo.done === 1).length
               const total = items.length || 1
               const progress = items.length ? completed : group.done ? 1 : 0
               const isChildrenCollapsed = childrenCollapsed.has(group.id)
               const isSelected = selectedGroupId === group.id
+              const isCompleting = completingGroups.has(group.id)
               const highlighted = highlightedId === group.id
               return (
                 <div
@@ -388,6 +411,7 @@ export function TodosPage() {
                   <div className="todo-group-header">
                     <CheckButton
                       checked={group.done === 1}
+                      disabled={isCompleting}
                       label={group.done ? '标记未完成' : '完成全部待办'}
                       onClick={() => handleToggleGroup(group)}
                     />
@@ -438,66 +462,6 @@ export function TodosPage() {
                     >
                       <Icon name="trash" size={14} />
                     </button>
-                  </div>
-
-                  <div
-                    className="t-acc-panel"
-                    data-open={isSelected ? 'true' : 'false'}
-                  >
-                    <div className="t-acc-panel-inner todo-feature-panel-inner">
-                      <label className="todo-reminder-row">
-                        <Icon name="clock" size={15} strokeWidth={1.7} />
-                        <span>{group.remindAt ? '提醒时间' : '设置提醒'}</span>
-                        <input
-                          type="datetime-local"
-                          value={toLocalDateTime(group.remindAt)}
-                          onChange={(event) =>
-                            updateGroup(group.id, {
-                              remindAt: event.target.value
-                                ? new Date(event.target.value).getTime()
-                                : null
-                            })
-                          }
-                        />
-                      </label>
-
-                      {newChild?.groupId === group.id && (
-                        <div
-                          className="todo-child-row t-panel-slide"
-                          data-open={newChildVisible ? 'true' : 'false'}
-                        >
-                          <CheckButton checked={false} disabled label="子待办尚未保存" />
-                          <input
-                            ref={newChildInputRef}
-                            className="todo-child-input"
-                            value={newChild.value}
-                            placeholder="输入子待办"
-                            onChange={(event) =>
-                              setNewChild({ ...newChild, value: event.target.value })
-                            }
-                            onBlur={() => commitNewChild(false)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                commitNewChild(true)
-                              } else if (event.key === 'Escape') {
-                                closeNewChild()
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      {newChild?.groupId !== group.id && (
-                        <button
-                          className="todo-add-child"
-                          onClick={() => beginNewChild(group.id)}
-                        >
-                          <Icon name="plus" size={14} strokeWidth={1.8} />
-                          添加子待办
-                        </button>
-                      )}
-                    </div>
                   </div>
 
                   <div
@@ -559,6 +523,68 @@ export function TodosPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="t-acc-panel"
+                    data-open={isSelected ? 'true' : 'false'}
+                  >
+                    <div className="t-acc-panel-inner todo-feature-panel-inner">
+                      {newChild?.groupId !== group.id && (
+                        <button
+                          className="todo-add-child"
+                          onClick={() => beginNewChild(group.id)}
+                        >
+                          <span className="todo-add-child-slot">
+                            <Icon name="plus" size={14} strokeWidth={1.8} />
+                          </span>
+                          <span>添加子待办</span>
+                        </button>
+                      )}
+
+                      {newChild?.groupId === group.id && (
+                        <div
+                          className="todo-child-row t-panel-slide"
+                          data-open={newChildVisible ? 'true' : 'false'}
+                        >
+                          <CheckButton checked={false} disabled label="子待办尚未保存" />
+                          <input
+                            ref={newChildInputRef}
+                            className="todo-child-input"
+                            value={newChild.value}
+                            placeholder="输入子待办"
+                            onChange={(event) =>
+                              setNewChild({ ...newChild, value: event.target.value })
+                            }
+                            onBlur={() => commitNewChild(false)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                commitNewChild(true)
+                              } else if (event.key === 'Escape') {
+                                closeNewChild()
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <label className="todo-reminder-row">
+                        <Icon name="clock" size={15} strokeWidth={1.7} />
+                        <span>{group.remindAt ? '提醒时间' : '设置提醒'}</span>
+                        <input
+                          type="datetime-local"
+                          value={toLocalDateTime(group.remindAt)}
+                          onChange={(event) =>
+                            updateGroup(group.id, {
+                              remindAt: event.target.value
+                                ? new Date(event.target.value).getTime()
+                                : null
+                            })
+                          }
+                        />
+                      </label>
                     </div>
                   </div>
                 </section>
