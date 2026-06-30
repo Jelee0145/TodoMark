@@ -244,7 +244,7 @@ export function NotesPage() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5">
+        <div className="flex-1 overflow-y-auto px-3 pt-0.5 pb-4 space-y-0.5">
           <GroupItem
             active={selectedGroupId === undefined}
             onClick={() => selectGroup(undefined)}
