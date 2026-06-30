@@ -41,7 +41,8 @@ export function TodosPage() {
   const [editingGroup, setEditingGroup] = useState<EditingValue | null>(null)
   const [editingTodo, setEditingTodo] = useState<EditingValue | null>(null)
   const [newChild, setNewChild] = useState<NewChildValue | null>(null)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [childrenCollapsed, setChildrenCollapsed] = useState<Set<string>>(new Set())
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [openingGroups, setOpeningGroups] = useState<Set<string>>(new Set())
   const [closingGroups, setClosingGroups] = useState<Set<string>>(new Set())
   const [openingTodos, setOpeningTodos] = useState<Set<string>>(new Set())
@@ -85,6 +86,24 @@ export function TodosPage() {
     return () => window.clearTimeout(timer)
   }, [highlightedId, groups, todos])
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-card-id]')) return
+      setSelectedGroupId((current) => {
+        if (!current) return current
+        if (editingGroup?.id === current) setEditingGroup(null)
+        if (newChild?.groupId === current) {
+          setNewChildVisible(false)
+          setNewChild(null)
+        }
+        return null
+      })
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [editingGroup, newChild])
+
   const todosByGroup = useMemo(() => {
     const result = new Map<string, Todo[]>()
     for (const todo of todos) {
@@ -117,9 +136,9 @@ export function TodosPage() {
       const group = await createGroup(title)
       setNewGroupTitle(null)
       revealItem(group.id, setOpeningGroups)
+      setSelectedGroupId(group.id)
       if (addChild) {
-        setCollapsed((current) => without(current, group.id))
-        setNewChild({ groupId: group.id, value: '', focusKey: Date.now() })
+        beginNewChild(group.id)
       }
     })
   }
@@ -172,7 +191,7 @@ export function TodosPage() {
   }
 
   const beginNewChild = (groupId: string) => {
-    setCollapsed((current) => without(current, groupId))
+    setSelectedGroupId(groupId)
     setNewChildVisible(false)
     setNewChild({ groupId, value: '', focusKey: Date.now() })
     window.requestAnimationFrame(() => {
@@ -202,8 +221,8 @@ export function TodosPage() {
     setNewChild(null)
   }
 
-  const toggleCollapsed = (groupId: string) => {
-    setCollapsed((current) => {
+  const toggleChildrenCollapsed = (groupId: string) => {
+    setChildrenCollapsed((current) => {
       const next = new Set(current)
       if (next.has(groupId)) next.delete(groupId)
       else next.add(groupId)
@@ -214,6 +233,7 @@ export function TodosPage() {
   const confirmRemoveGroup = async (group: TodoGroup) => {
     if (window.confirm(`确定删除“${group.title}”及其全部子待办吗？`)) {
       setClosingGroups((current) => withValue(current, group.id))
+      setSelectedGroupId((current) => (current === group.id ? null : current))
       await waitForMotion('--panel-close-dur', 350)
       await removeGroup(group.id)
       setClosingGroups((current) => without(current, group.id))
@@ -335,7 +355,8 @@ export function TodosPage() {
               const completed = items.filter((todo) => todo.done === 1).length
               const total = items.length || 1
               const progress = items.length ? completed : group.done ? 1 : 0
-              const isCollapsed = collapsed.has(group.id)
+              const isChildrenCollapsed = childrenCollapsed.has(group.id)
+              const isSelected = selectedGroupId === group.id
               const highlighted = highlightedId === group.id
               return (
                 <div
@@ -354,10 +375,14 @@ export function TodosPage() {
                     if (node) cardRefs.current.set(group.id, node)
                     else cardRefs.current.delete(group.id)
                   }}
-                  className={`todo-inline-card t-acc ${highlighted ? 'is-highlighted' : ''} ${
-                    editingGroup?.id === group.id ? 'is-editing' : ''
-                  }`}
-                  data-open={isCollapsed ? 'false' : 'true'}
+                  data-card-id={group.id}
+                  data-children-open={isChildrenCollapsed ? 'false' : 'true'}
+                  className={`todo-inline-card ${isSelected ? 'is-selected' : ''} ${
+                    highlighted ? 'is-highlighted' : ''
+                  } ${editingGroup?.id === group.id ? 'is-editing' : ''}`}
+                  onClick={() => {
+                    if (!isSelected) setSelectedGroupId(group.id)
+                  }}
                 >
                   <div className="todo-group-header">
                     <CheckButton
@@ -397,8 +422,8 @@ export function TodosPage() {
                     {items.length > 0 && (
                       <button
                         className="todo-collapse-button"
-                        onClick={() => toggleCollapsed(group.id)}
-                        aria-label={isCollapsed ? '展开子待办' : '收起子待办'}
+                        onClick={() => toggleChildrenCollapsed(group.id)}
+                        aria-label={isChildrenCollapsed ? '展开子待办' : '收起子待办'}
                       >
                         <span className="t-acc-chevron">
                           <Icon name="chevron-down" size={14} />
@@ -414,75 +439,88 @@ export function TodosPage() {
                     </button>
                   </div>
 
-                  <label className="todo-reminder-row">
-                    <Icon name="clock" size={15} strokeWidth={1.7} />
-                    <span>{group.remindAt ? '提醒时间' : '设置提醒'}</span>
-                    <input
-                      type="datetime-local"
-                      value={toLocalDateTime(group.remindAt)}
-                      onChange={(event) =>
-                        updateGroup(group.id, {
-                          remindAt: event.target.value ? new Date(event.target.value).getTime() : null
-                        })
-                      }
-                    />
-                  </label>
-
-                  <div className="t-acc-panel">
+                  <div
+                    className="t-acc-panel"
+                    data-open={isChildrenCollapsed ? 'false' : 'true'}
+                  >
                     <div className="t-acc-panel-inner">
-                    <div className="todo-children">
-                      {items.map((todo) => (
-                        <div
-                          key={todo.id}
-                          ref={(node) => {
-                            if (node) cardRefs.current.set(todo.id, node)
-                            else cardRefs.current.delete(todo.id)
-                          }}
-                          className="todo-child-row group t-panel-slide"
-                          data-open={
-                            openingTodos.has(todo.id) || closingTodos.has(todo.id) ? 'false' : 'true'
-                          }
-                        >
-                          <CheckButton
-                            checked={todo.done === 1}
-                            label={todo.done ? '标记未完成' : '标记完成'}
-                            onClick={() => handleToggleTodo(todo)}
-                          />
-                          {editingTodo?.id === todo.id ? (
-                            <input
-                              ref={todoInputRef}
-                              className="todo-child-input"
-                              value={editingTodo.value}
-                              onChange={(event) =>
-                                setEditingTodo({ id: todo.id, value: event.target.value })
-                              }
-                              onBlur={() => commitTodoTitle(todo, false)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  commitTodoTitle(todo, true)
-                                } else if (event.key === 'Escape') {
-                                  setEditingTodo(null)
-                                }
-                              }}
-                            />
-                          ) : (
-                            <button
-                              className={`todo-child-title ${todo.done ? 'is-done' : ''}`}
-                              onClick={() => setEditingTodo({ id: todo.id, value: todo.title })}
-                            >
-                              {todo.title}
-                            </button>
-                          )}
-                          <button
-                            className="todo-child-delete"
-                            onClick={() => confirmRemoveTodo(todo)}
-                            aria-label="删除子待办"
+                      <div className="todo-children">
+                        {items.map((todo) => (
+                          <div
+                            key={todo.id}
+                            ref={(node) => {
+                              if (node) cardRefs.current.set(todo.id, node)
+                              else cardRefs.current.delete(todo.id)
+                            }}
+                            className="todo-child-row group t-panel-slide"
+                            data-open={
+                              openingTodos.has(todo.id) || closingTodos.has(todo.id) ? 'false' : 'true'
+                            }
                           >
-                            <Icon name="trash" size={13} />
-                          </button>
-                        </div>
-                      ))}
+                            <CheckButton
+                              checked={todo.done === 1}
+                              label={todo.done ? '标记未完成' : '标记完成'}
+                              onClick={() => handleToggleTodo(todo)}
+                            />
+                            {editingTodo?.id === todo.id ? (
+                              <input
+                                ref={todoInputRef}
+                                className="todo-child-input"
+                                value={editingTodo.value}
+                                onChange={(event) =>
+                                  setEditingTodo({ id: todo.id, value: event.target.value })
+                                }
+                                onBlur={() => commitTodoTitle(todo, false)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    commitTodoTitle(todo, true)
+                                  } else if (event.key === 'Escape') {
+                                    setEditingTodo(null)
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <button
+                                className={`todo-child-title ${todo.done ? 'is-done' : ''}`}
+                                onClick={() => setEditingTodo({ id: todo.id, value: todo.title })}
+                              >
+                                {todo.title}
+                              </button>
+                            )}
+                            <button
+                              className="todo-child-delete"
+                              onClick={() => confirmRemoveTodo(todo)}
+                              aria-label="删除子待办"
+                            >
+                              <Icon name="trash" size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="t-acc-panel"
+                    data-open={isSelected ? 'true' : 'false'}
+                  >
+                    <div className="t-acc-panel-inner todo-feature-panel-inner">
+                      <label className="todo-reminder-row">
+                        <Icon name="clock" size={15} strokeWidth={1.7} />
+                        <span>{group.remindAt ? '提醒时间' : '设置提醒'}</span>
+                        <input
+                          type="datetime-local"
+                          value={toLocalDateTime(group.remindAt)}
+                          onChange={(event) =>
+                            updateGroup(group.id, {
+                              remindAt: event.target.value
+                                ? new Date(event.target.value).getTime()
+                                : null
+                            })
+                          }
+                        />
+                      </label>
 
                       {newChild?.groupId === group.id && (
                         <div
@@ -512,12 +550,14 @@ export function TodosPage() {
                       )}
 
                       {newChild?.groupId !== group.id && (
-                        <button className="todo-add-child" onClick={() => beginNewChild(group.id)}>
+                        <button
+                          className="todo-add-child"
+                          onClick={() => beginNewChild(group.id)}
+                        >
                           <Icon name="plus" size={14} strokeWidth={1.8} />
                           添加子待办
                         </button>
                       )}
-                    </div>
                     </div>
                   </div>
                 </section>
@@ -541,7 +581,7 @@ function CheckButton({
   checked: boolean
   label: string
   disabled?: boolean
-  onClick?: () => void
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void
 }) {
   return (
     <button

@@ -145,19 +145,20 @@ body {
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
 }
-.t-acc[data-open="true"] .t-acc-panel {
+.t-acc-panel[data-open="true"] {
   grid-template-rows: 1fr;
   transition: grid-template-rows var(--acc-expand) var(--acc-ease);
 }
 .t-acc-panel-inner {
   overflow: hidden;
+  min-height: 0;
   opacity: 0;
   filter: blur(2px);
   transition:
     opacity var(--acc-collapse) var(--acc-ease),
     filter var(--acc-collapse) var(--acc-ease);
 }
-.t-acc[data-open="true"] .t-acc-panel-inner {
+.t-acc-panel[data-open="true"] .t-acc-panel-inner {
   opacity: 1;
   filter: blur(0);
   transition:
@@ -178,7 +179,7 @@ body {
   transition: transform var(--acc-chevron) var(--acc-ease);
 }
 .t-acc-chevron path { vector-effect: non-scaling-stroke; }
-.t-acc[data-open="true"] .t-acc-chevron {
+[data-children-open="true"] .t-acc-chevron {
   transform: scaleY(-1);
 }
 
@@ -616,11 +617,22 @@ body {
   border-color: var(--color-cool-blue);
   box-shadow: 0 0 0 1px var(--color-cool-blue);
 }
+.todo-inline-card.is-selected {
+  border-color: rgba(0, 117, 222, 0.32);
+  box-shadow:
+    0 0 0 1px rgba(0, 117, 222, 0.32),
+    rgba(23, 25, 28, 0.10) 0 14px 28px -20px;
+}
 .todo-group-header {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 18px 20px 8px;
+  cursor: pointer;
+}
+.todo-group-header .todo-inline-title-input,
+.todo-group-header .todo-inline-title {
+  cursor: text;
 }
 .todo-inline-title,
 .todo-inline-title-input {
@@ -677,7 +689,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 20px 8px 54px;
   color: var(--color-graphite);
   font-size: 12px;
   font-weight: 500;
@@ -695,8 +706,17 @@ body {
 .todo-reminder-row input:focus {
   box-shadow: 0 0 0 1px var(--color-cool-blue);
 }
+.todo-feature-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 20px 12px 54px;
+}
 .todo-children {
-  padding: 2px 18px 14px 54px;
+  padding: 2px 18px 8px 54px;
+}
+.todo-children:empty {
+  display: none;
 }
 .todo-child-row {
   min-height: 42px;
@@ -740,9 +760,10 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 4px 8px 0;
+  align-self: flex-start;
+  margin: 2px 0 0;
   border-radius: 8px;
-  padding: 7px 8px;
+  padding: 7px 10px;
   color: var(--color-graphite);
   font-size: 13px;
   transition: color 150ms ease, background 150ms ease;
