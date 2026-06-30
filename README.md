@@ -58,7 +58,6 @@ npm run dist
 ├── out/                # build 输出
 ├── dist/               # 安装包输出
 ├── DESIGN.md           # 视觉设计规范
-├── PLAN.md             # 详细实施计划
 └── AGENTS.md           # AI 开发指引
 ```
 
