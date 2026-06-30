@@ -579,15 +579,28 @@ body {
 
 /* ============ 笔记列表卡片 ============ */
 .note-card {
-  transition: background-color 180ms ease, box-shadow 180ms ease;
+  position: relative;
+  transition: background-color 180ms ease;
 }
-.note-card:hover {
+.note-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 18px;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--note-group-color) 18%, transparent),
     0 12px 28px -18px color-mix(in srgb, var(--note-group-color) 42%, transparent);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+  z-index: 20;
+}
+.note-card:hover::after {
+  opacity: 1;
 }
 @media (prefers-reduced-motion: reduce) {
-  .note-card {
+  .note-card,
+  .note-card::after {
     transition: none;
   }
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import MDEditor from '@uiw/react-md-editor'
 import { useSearchParams } from 'react-router-dom'
 import { useNotesStore } from '@renderer/store/notes'
@@ -83,13 +84,26 @@ export function NotesPage() {
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupColor, setNewGroupColor] = useState('#5d2a1a')
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
 
   useEffect(() => {
-    if (!openMenu) return
-    const close = () => setOpenMenu(null)
+    if (!openMenu) {
+      setMenuPos(null)
+      return
+    }
+    const close = () => {
+      setOpenMenu(null)
+      setMenuPos(null)
+    }
     window.addEventListener('click', close)
     return () => window.removeEventListener('click', close)
   }, [openMenu])
+
+  const openMenuAt = (key: string, anchor: HTMLElement) => {
+    const r = anchor.getBoundingClientRect()
+    setMenuPos({ top: r.bottom + 4, left: r.right - 112 })
+    setOpenMenu((v) => (v === key ? null : key))
+  }
 
   // 编辑器本地受控态：镜像当前笔记的 title/content，输入即时反映、防抖落库
   // IME 兼容：不在 onChange 里做异步回填或门控，受控 value 与浏览器 IME 协同（React 17+ 已处理）；
@@ -246,8 +260,9 @@ export function NotesPage() {
               icon={<span className="w-2 h-2 rounded-full shrink-0" style={{ background: g.color }} />}
               label={g.name}
               menuOpen={openMenu === `group:${g.id}`}
-              onMenuToggle={() => setOpenMenu((value) => value === `group:${g.id}` ? null : `group:${g.id}`)}
+              onMenuToggle={(anchor) => openMenuAt(`group:${g.id}`, anchor)}
               onDelete={() => handleDeleteGroup(g.id, g.name)}
+              menuPos={openMenu === `group:${g.id}` ? menuPos : null}
             />
           ))}
         </div>
@@ -340,37 +355,40 @@ export function NotesPage() {
                   className="absolute right-3 top-3 z-10 w-7 h-7 grid place-items-center rounded-full text-graphite opacity-70 hover:opacity-100 hover:text-ink hover:bg-pure-white transition-colors"
                   onClick={(event) => {
                     event.stopPropagation()
-                    setOpenMenu((value) => value === `note:${n.id}` ? null : `note:${n.id}`)
+                    openMenuAt(`note:${n.id}`, event.currentTarget)
                   }}
-                  aria-label={`打开“${n.title || '无标题'}”的更多操作`}
+                  aria-label={`打开"${n.title || '无标题'}"的更多操作`}
                   aria-expanded={openMenu === `note:${n.id}`}
                 >
                   <Icon name="more-horizontal" size={17} />
                 </button>
-                {openMenu === `note:${n.id}` && (
-                  <div
-                    className="absolute right-3 top-11 z-20 min-w-28 rounded-xl border border-dove/30 bg-pure-white p-1 shadow-[var(--shadow-card)]"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <button
-                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-ink hover:bg-fog"
-                      onClick={async () => {
-                        setOpenMenu(null)
-                        await updateNote(n.id, { pinned: n.pinned ? 0 : 1 })
-                      }}
+                {openMenu === `note:${n.id}` && menuPos &&
+                  createPortal(
+                    <div
+                      className="fixed z-[100] min-w-28 rounded-xl border border-dove/30 bg-pure-white p-1 shadow-[var(--shadow-card)]"
+                      style={{ top: menuPos.top, left: menuPos.left }}
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      <Icon name="pin" size={13} />
-                      {n.pinned ? '取消置顶' : '置顶'}
-                    </button>
-                    <button
-                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-rust hover:bg-apricot-wash/60"
-                      onClick={() => handleDeleteNote(n.id)}
-                    >
-                      <Icon name="trash" size={13} />
-                      删除
-                    </button>
-                  </div>
-                )}
+                      <button
+                        className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-ink hover:bg-fog"
+                        onClick={async () => {
+                          setOpenMenu(null)
+                          await updateNote(n.id, { pinned: n.pinned ? 0 : 1 })
+                        }}
+                      >
+                        <Icon name="pin" size={13} />
+                        {n.pinned ? '取消置顶' : '置顶'}
+                      </button>
+                      <button
+                        className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-rust hover:bg-apricot-wash/60"
+                        onClick={() => handleDeleteNote(n.id)}
+                      >
+                        <Icon name="trash" size={13} />
+                        删除
+                      </button>
+                    </div>,
+                    document.body
+                  )}
                 </div>
               )
             })
@@ -490,7 +508,8 @@ function GroupItem({
   count,
   menuOpen,
   onMenuToggle,
-  onDelete
+  onDelete,
+  menuPos
 }: {
   active: boolean
   onClick: () => void
@@ -498,8 +517,9 @@ function GroupItem({
   label: string
   count?: number
   menuOpen?: boolean
-  onMenuToggle?: () => void
+  onMenuToggle?: (anchor: HTMLElement) => void
   onDelete?: () => void
+  menuPos?: { top: number; left: number } | null
 }) {
   return (
     <div className="relative group">
@@ -520,28 +540,31 @@ function GroupItem({
           className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 grid place-items-center rounded-full text-graphite opacity-70 hover:opacity-100 hover:text-ink hover:bg-fog transition-colors"
           onClick={(event) => {
             event.stopPropagation()
-            onMenuToggle()
+            onMenuToggle(event.currentTarget)
           }}
-          aria-label={`打开“${label}”的更多操作`}
+          aria-label={`打开"${label}"的更多操作`}
           aria-expanded={menuOpen}
         >
           <Icon name="more-horizontal" size={16} />
         </button>
       )}
-      {menuOpen && onDelete && (
-        <div
-          className="absolute right-1 top-9 z-20 min-w-28 rounded-xl border border-dove/30 bg-pure-white p-1 shadow-[var(--shadow-card)]"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-rust hover:bg-apricot-wash/60"
-            onClick={onDelete}
+      {menuOpen && onDelete && menuPos &&
+        createPortal(
+          <div
+            className="fixed z-[100] min-w-28 rounded-xl border border-dove/30 bg-pure-white p-1 shadow-[var(--shadow-card)]"
+            style={{ top: menuPos.top, left: menuPos.left }}
+            onClick={(event) => event.stopPropagation()}
           >
-            <Icon name="trash" size={13} />
-            删除分组
-          </button>
-        </div>
-      )}
+            <button
+              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-rust hover:bg-apricot-wash/60"
+              onClick={onDelete}
+            >
+              <Icon name="trash" size={13} />
+              删除分组
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
