@@ -301,7 +301,7 @@ body {
   transition: transform var(--acc-chevron) var(--acc-ease);
 }
 .t-acc-chevron path { vector-effect: non-scaling-stroke; }
-[data-children-open="true"] .t-acc-chevron {
+[data-open="true"] .t-acc-chevron {
   transform: scaleY(-1);
 }
 

@@ -69,7 +69,7 @@ export function SettingsPage() {
             />
           </svg>
         </button>
-        <div className="t-acc-panel">
+        <div className="t-acc-panel" data-open={isOpen ? 'true' : 'false'}>
           {/* padding 放在内容 wrapper 上，避免折叠容器因 padding 残留高度 */}
           <div className="t-acc-panel-inner">
             <div className="px-6 pb-6 pt-1">{children}</div>
