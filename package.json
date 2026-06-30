@@ -16,6 +16,7 @@
     "dist": "electron-vite build && electron-builder"
   },
   "dependencies": {
+    "@milkdown/crepe": "^7.21.2",
     "@uiw/react-md-editor": "^4.0.5",
     "active-win": "^9.0.0",
     "better-sqlite3": "^12.11.1",
