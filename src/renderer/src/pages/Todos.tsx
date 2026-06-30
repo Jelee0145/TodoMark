@@ -318,9 +318,9 @@ export function TodosPage() {
     const remaining = items.filter((todo) => todo.done !== 1)
     setCompletingGroups((current) => withValue(current, group.id))
     try {
-      for (let i = 0; i < remaining.length; i++) {
+      for (let i = remaining.length - 1; i >= 0; i--) {
         const todo = remaining[i]
-        if (i > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 120))
+        if (i < remaining.length - 1) await new Promise<void>((resolve) => window.setTimeout(resolve, 120))
         await updateTodo(todo.id, { done: 1 })
       }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 200))
