@@ -309,7 +309,7 @@ export function NotesPage() {
             notes.map((n, idx) => {
               const grp = groups.find((g) => g.id === n.groupId)
               const active = activeNoteId === n.id
-              const preview = n.content.replace(/[#*`>\-\[\]()!]/g, '').replace(/\s+/g, ' ').trim()
+              const preview = n.content.replace(/[#*`>\-[\]()!]/g, '').replace(/\s+/g, ' ').trim()
               return (
                 <div
                   key={n.id}

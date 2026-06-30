@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { ipc } from '../../lib/ipc'
 import { formatDuration, mdShort } from '../../lib/format'
-import type { TrendPoint } from '@shared/types'
 import { Card } from '../ui/Card'
 import { useAsync } from '../../lib/useAsync'
 

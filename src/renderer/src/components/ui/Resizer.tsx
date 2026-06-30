@@ -22,7 +22,7 @@ export function Resizer({ onResize, onResizeEnd }: Props) {
     onResize(e.clientX - lastX.current)
     lastX.current = e.clientX
   }
-  const onUp = (e: React.PointerEvent) => {
+  const onUp = (_e: React.PointerEvent) => {
     if (!dragging.current) return
     dragging.current = false
     document.body.style.userSelect = ''

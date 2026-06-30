@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { ipc } from '../../lib/ipc'
 import { categoryColor, formatDuration } from '../../lib/format'
-import type { CategorySlice, RangeKey } from '@shared/types'
+import type { RangeKey } from '@shared/types'
 import { Card } from '../ui/Card'
 import { useAsync } from '../../lib/useAsync'
 
