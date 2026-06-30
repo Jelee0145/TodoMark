@@ -8,18 +8,21 @@ import { NotesPage } from './pages/Notes'
 import { TodosPage } from './pages/Todos'
 import { SettingsPage } from './pages/Settings'
 import { StickyNotePage } from './pages/StickyNote'
+import { DocumentsPage } from './pages/Documents'
 import { useUsageStore } from './store/usage'
 import { todoReminderPath } from './lib/todo-route'
 
 export default function App() {
   const navigate = useNavigate()
   const stickyMatch = useMatch('/sticky-note/:noteId')
+  const documentsMatch = useMatch('/documents')
   const isStickyRoute = !!stickyMatch
+  const isDocumentsRoute = !!documentsMatch
   const loadPaused = useUsageStore((s) => s.loadPaused)
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
-    if (isStickyRoute) return
+    if (isStickyRoute || isDocumentsRoute) return
     loadPaused()
     let off: (() => void) | undefined
     ;(async () => {
@@ -27,26 +30,34 @@ export default function App() {
       off = window.api.window.onMaximizeChange((m) => setMaximized(m))
     })()
     return () => off?.()
-  }, [isStickyRoute, loadPaused])
+  }, [isDocumentsRoute, isStickyRoute, loadPaused])
 
   useEffect(() => {
-    if (isStickyRoute) return
+    if (isStickyRoute || isDocumentsRoute) return
     return window.api.onTodoReminderOpen((payload) => {
       if (payload.todoId) navigate(todoReminderPath(payload.todoId))
     })
-  }, [isStickyRoute, navigate])
+  }, [isDocumentsRoute, isStickyRoute, navigate])
 
   useEffect(() => {
-    if (isStickyRoute) return
+    if (isStickyRoute || isDocumentsRoute) return
     return window.api.onNoteOpen((payload) => {
       navigate(`/notes?noteId=${encodeURIComponent(payload.noteId)}`)
     })
-  }, [isStickyRoute, navigate])
+  }, [isDocumentsRoute, isStickyRoute, navigate])
 
   if (isStickyRoute) {
     return (
       <Routes>
         <Route path="/sticky-note/:noteId" element={<StickyNotePage />} />
+      </Routes>
+    )
+  }
+
+  if (isDocumentsRoute) {
+    return (
+      <Routes>
+        <Route path="/documents" element={<DocumentsPage />} />
       </Routes>
     )
   }

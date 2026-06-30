@@ -68,6 +68,13 @@ export function TopBar() {
               {it.label}
             </NavLink>
           ))}
+          <button
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[14px] font-medium text-graphite hover:text-ink hover:bg-fog transition-colors"
+            onClick={() => window.api.documents.openWindow()}
+          >
+            <Icon name="layers" size={16} strokeWidth={1.6} />
+            文档
+          </button>
         </nav>
 
         <div className="flex-1" />

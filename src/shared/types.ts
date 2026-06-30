@@ -102,3 +102,68 @@ export interface ToastPayload {
 export interface NoteOpenPayload {
   noteId: string
 }
+
+export interface MarkdownWorkspace {
+  id: string
+  name: string
+  rootPath: string
+  createdAt: number
+  lastOpenedAt: number
+}
+
+export interface DocumentTag {
+  id: string
+  name: string
+}
+
+export interface MarkdownDocument {
+  path: string
+  name: string
+  workspaceId: string | null
+  relativePath: string | null
+  size: number
+  mtimeMs: number
+  lastOpenedAt: number
+  readOnly: boolean
+  tags: DocumentTag[]
+}
+
+export interface MarkdownDocumentContent {
+  document: MarkdownDocument
+  content: string
+}
+
+export interface DocumentTab {
+  path: string
+  title: string
+  dirty: boolean
+  saveState: SaveState
+}
+
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
+
+export interface ExternalChangeConflict {
+  path: string
+  expectedMtimeMs: number
+  actualMtimeMs: number
+}
+
+export type DocumentSaveResult =
+  | { ok: true; document: MarkdownDocument }
+  | { ok: false; conflict: ExternalChangeConflict }
+
+export interface DocumentSearchResult {
+  document: MarkdownDocument
+  excerpt: string
+}
+
+export interface DocumentExternalChange {
+  path: string
+  mtimeMs: number | null
+  deleted: boolean
+}
+
+export interface DocumentSession {
+  openPaths: string[]
+  activePath: string | null
+}

@@ -15,7 +15,15 @@ import type {
   TimeRiverPoint,
   AppRule,
   ToastPayload,
-  NoteOpenPayload
+  NoteOpenPayload,
+  MarkdownWorkspace,
+  MarkdownDocument,
+  MarkdownDocumentContent,
+  DocumentSaveResult,
+  DocumentSearchResult,
+  DocumentTag,
+  DocumentExternalChange,
+  DocumentSession
 } from '../shared/types'
 
 const api = {
@@ -85,6 +93,62 @@ const api = {
     set: (key: string, value: string): Promise<void> =>
       ipcRenderer.invoke('settings:set', key, value),
     all: (): Promise<Record<string, string>> => ipcRenderer.invoke('settings:all')
+  },
+  documents: {
+    openWindow: (paths?: string[]): Promise<void> => ipcRenderer.invoke('documents:openWindow', paths),
+    workspaces: (): Promise<MarkdownWorkspace[]> => ipcRenderer.invoke('documents:workspaces'),
+    addWorkspace: (): Promise<MarkdownWorkspace | null> => ipcRenderer.invoke('documents:addWorkspace'),
+    removeWorkspace: (id: string): Promise<void> => ipcRenderer.invoke('documents:removeWorkspace', id),
+    scanWorkspace: (id: string): Promise<MarkdownDocument[]> =>
+      ipcRenderer.invoke('documents:scanWorkspace', id),
+    list: (workspaceId?: string): Promise<MarkdownDocument[]> =>
+      ipcRenderer.invoke('documents:list', workspaceId),
+    recent: (limit?: number): Promise<MarkdownDocument[]> =>
+      ipcRenderer.invoke('documents:recent', limit),
+    import: (): Promise<MarkdownDocument[]> => ipcRenderer.invoke('documents:import'),
+    read: (path: string): Promise<MarkdownDocumentContent> =>
+      ipcRenderer.invoke('documents:read', path),
+    save: (
+      path: string,
+      content: string,
+      expectedMtimeMs: number,
+      force = false
+    ): Promise<DocumentSaveResult> =>
+      ipcRenderer.invoke('documents:save', path, content, expectedMtimeMs, force),
+    saveAs: (path: string, content: string): Promise<MarkdownDocument | null> =>
+      ipcRenderer.invoke('documents:saveAs', path, content),
+    create: (workspaceId: string, folderPath?: string): Promise<MarkdownDocument> =>
+      ipcRenderer.invoke('documents:create', workspaceId, folderPath),
+    rename: (path: string, newName: string): Promise<MarkdownDocument> =>
+      ipcRenderer.invoke('documents:rename', path, newName),
+    move: (path: string): Promise<MarkdownDocument | null> =>
+      ipcRenderer.invoke('documents:move', path),
+    delete: (path: string): Promise<void> => ipcRenderer.invoke('documents:delete', path),
+    search: (query: string): Promise<DocumentSearchResult[]> =>
+      ipcRenderer.invoke('documents:search', query),
+    setTags: (path: string, tags: string[]): Promise<DocumentTag[]> =>
+      ipcRenderer.invoke('documents:setTags', path, tags),
+    getSession: (): Promise<DocumentSession> => ipcRenderer.invoke('documents:getSession'),
+    setSession: (session: DocumentSession): Promise<void> =>
+      ipcRenderer.invoke('documents:setSession', session),
+    resolveAsset: (documentPath: string, source: string): Promise<string> =>
+      ipcRenderer.invoke('documents:resolveAsset', documentPath, source),
+    confirmClose: (): Promise<void> => ipcRenderer.invoke('documents:confirmClose'),
+    onOpenPaths: (cb: (paths: string[]) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, paths: string[]) => cb(paths)
+      ipcRenderer.on('documents:openPaths', handler)
+      return () => ipcRenderer.removeListener('documents:openPaths', handler)
+    },
+    onExternalChange: (cb: (payload: DocumentExternalChange) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: DocumentExternalChange) => cb(payload)
+      ipcRenderer.on('documents:externalChanged', handler)
+      return () => ipcRenderer.removeListener('documents:externalChanged', handler)
+    },
+    onFlushRequested: (cb: () => void): (() => void) => {
+      const handler = () => cb()
+      ipcRenderer.on('documents:flushRequested', handler)
+      return () => ipcRenderer.removeListener('documents:flushRequested', handler)
+    }
   },
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),

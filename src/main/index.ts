@@ -6,11 +6,15 @@ import { startNotifier, stopNotifier } from './notifications'
 import { registerIpc } from './ipc'
 import { registerWindowIpc } from './window-ipc'
 import { closeStickyNoteWindows, registerStickyNoteIpc } from './sticky-notes'
+import { closeDocumentWatchers, registerDocumentIpc } from './documents'
+import { closeDocumentWindow, getDocumentWindow, openDocumentWindow } from './documents-window'
 import type { ToastPayload } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let documentServicesReady = false
+const pendingDocumentPaths: string[] = []
 
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -128,8 +132,12 @@ const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
+  app.on('second-instance', (_event, argv) => {
+    const markdownPaths = argv.filter((arg) => /\.(md|markdown)$/i.test(arg))
+    if (markdownPaths.length) {
+      if (documentServicesReady) void openDocumentWindow(markdownPaths)
+      else pendingDocumentPaths.push(...markdownPaths)
+    } else if (mainWindow) {
       showMainWindow()
       mainWindow.focus()
     }
@@ -141,8 +149,10 @@ if (!gotLock) {
     initDatabase(dbPath)
     registerIpc()
     registerStickyNoteIpc(() => mainWindow)
-    const win = createWindow()
-    registerWindowIpc(win)
+    registerWindowIpc()
+    registerDocumentIpc(openDocumentWindow, getDocumentWindow, closeDocumentWindow)
+    documentServicesReady = true
+    createWindow()
     createTray()
     startTracker()
     startNotifier(
@@ -154,10 +164,15 @@ if (!gotLock) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        const w = createWindow()
-        registerWindowIpc(w)
+        createWindow()
       }
     })
+
+    const initialMarkdownPaths = [
+      ...pendingDocumentPaths.splice(0),
+      ...process.argv.filter((arg) => /\.(md|markdown)$/i.test(arg))
+    ]
+    if (initialMarkdownPaths.length) void openDocumentWindow(initialMarkdownPaths)
   })
 }
 
@@ -169,6 +184,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  closeDocumentWindow()
+  closeDocumentWatchers()
   closeStickyNoteWindows()
   stopNotifier()
 })

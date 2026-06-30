@@ -14,7 +14,11 @@ import type {
   TimeRiverPoint,
   Todo,
   TodoGroup,
-  TrendPoint
+  TrendPoint,
+  MarkdownDocument,
+  MarkdownWorkspace,
+  DocumentTag,
+  DocumentSession
 } from '../shared/types'
 
 const require = createRequire(import.meta.url)
@@ -27,6 +31,7 @@ const SAMPLE_SEC = 5
 export function initDatabase(dbPath: string): void {
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
+  db.pragma('foreign_keys = ON')
   migrate()
   seedDefaults()
 }
@@ -94,6 +99,46 @@ function migrate(): void {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS markdown_workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      rootPath TEXT NOT NULL UNIQUE,
+      createdAt INTEGER NOT NULL,
+      lastOpenedAt INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS markdown_documents (
+      path TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      workspaceId TEXT REFERENCES markdown_workspaces(id) ON DELETE SET NULL,
+      relativePath TEXT,
+      size INTEGER NOT NULL DEFAULT 0,
+      mtimeMs INTEGER NOT NULL DEFAULT 0,
+      readOnly INTEGER NOT NULL DEFAULT 0,
+      lastOpenedAt INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_markdown_documents_recent
+      ON markdown_documents(lastOpenedAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_markdown_documents_workspace
+      ON markdown_documents(workspaceId, relativePath);
+
+    CREATE TABLE IF NOT EXISTS document_tags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE
+    );
+
+    CREATE TABLE IF NOT EXISTS document_tag_map (
+      path TEXT NOT NULL REFERENCES markdown_documents(path) ON UPDATE CASCADE ON DELETE CASCADE,
+      tagId TEXT NOT NULL REFERENCES document_tags(id) ON DELETE CASCADE,
+      PRIMARY KEY(path, tagId)
+    );
+
+    CREATE TABLE IF NOT EXISTS markdown_search (
+      path TEXT PRIMARY KEY REFERENCES markdown_documents(path) ON UPDATE CASCADE ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL
     );
   `)
 
@@ -261,6 +306,208 @@ export function getAllSettings(): Record<string, string> {
   const out: Record<string, string> = {}
   for (const r of rows) out[r.key] = r.value
   return out
+}
+
+// ---------- Markdown 文档库元数据 ----------
+type MarkdownDocumentRow = Omit<MarkdownDocument, 'readOnly' | 'tags'> & { readOnly: number }
+
+function documentTags(path: string): DocumentTag[] {
+  return db
+    .prepare(
+      `SELECT t.id, t.name FROM document_tags t
+       JOIN document_tag_map m ON m.tagId = t.id
+       WHERE m.path = ? ORDER BY t.name COLLATE NOCASE`
+    )
+    .all(path) as DocumentTag[]
+}
+
+function hydrateDocument(row: MarkdownDocumentRow): MarkdownDocument {
+  return { ...row, readOnly: row.readOnly === 1, tags: documentTags(row.path) }
+}
+
+export function listMarkdownWorkspaces(): MarkdownWorkspace[] {
+  return db
+    .prepare('SELECT * FROM markdown_workspaces ORDER BY lastOpenedAt DESC, name COLLATE NOCASE')
+    .all() as MarkdownWorkspace[]
+}
+
+export function upsertMarkdownWorkspace(rootPath: string, name: string): MarkdownWorkspace {
+  const now = Date.now()
+  const existing = db
+    .prepare('SELECT * FROM markdown_workspaces WHERE rootPath = ?')
+    .get(rootPath) as MarkdownWorkspace | undefined
+  if (existing) {
+    db.prepare('UPDATE markdown_workspaces SET name = ?, lastOpenedAt = ? WHERE id = ?').run(
+      name,
+      now,
+      existing.id
+    )
+    return { ...existing, name, lastOpenedAt: now }
+  }
+  const workspace: MarkdownWorkspace = {
+    id: crypto.randomUUID(),
+    name,
+    rootPath,
+    createdAt: now,
+    lastOpenedAt: now
+  }
+  db.prepare(
+    `INSERT INTO markdown_workspaces (id, name, rootPath, createdAt, lastOpenedAt)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(workspace.id, workspace.name, workspace.rootPath, workspace.createdAt, workspace.lastOpenedAt)
+  return workspace
+}
+
+export function removeMarkdownWorkspace(id: string): void {
+  db.transaction(() => {
+    db.prepare('DELETE FROM markdown_documents WHERE workspaceId = ?').run(id)
+    db.prepare('DELETE FROM markdown_workspaces WHERE id = ?').run(id)
+  })()
+}
+
+export function getMarkdownWorkspace(id: string): MarkdownWorkspace | null {
+  return (
+    (db.prepare('SELECT * FROM markdown_workspaces WHERE id = ?').get(id) as
+      | MarkdownWorkspace
+      | undefined) ?? null
+  )
+}
+
+export function upsertMarkdownDocument(
+  document: Omit<MarkdownDocument, 'tags'>,
+  content: string
+): MarkdownDocument {
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO markdown_documents
+       (path, name, workspaceId, relativePath, size, mtimeMs, readOnly, lastOpenedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET
+         name=excluded.name, workspaceId=excluded.workspaceId,
+         relativePath=excluded.relativePath, size=excluded.size,
+         mtimeMs=excluded.mtimeMs, readOnly=excluded.readOnly`
+    ).run(
+      document.path,
+      document.name,
+      document.workspaceId,
+      document.relativePath,
+      document.size,
+      document.mtimeMs,
+      document.readOnly ? 1 : 0,
+      document.lastOpenedAt
+    )
+    db.prepare(
+      `INSERT INTO markdown_search (path, title, content) VALUES (?, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET title=excluded.title, content=excluded.content`
+    ).run(document.path, document.name, content)
+  })()
+  return getMarkdownDocument(document.path)!
+}
+
+export function touchMarkdownDocument(path: string): void {
+  db.prepare('UPDATE markdown_documents SET lastOpenedAt = ? WHERE path = ?').run(Date.now(), path)
+}
+
+export function getMarkdownDocument(path: string): MarkdownDocument | null {
+  const row = db.prepare('SELECT * FROM markdown_documents WHERE path = ?').get(path) as
+    | MarkdownDocumentRow
+    | undefined
+  return row ? hydrateDocument(row) : null
+}
+
+export function listMarkdownDocuments(workspaceId?: string): MarkdownDocument[] {
+  const rows = (workspaceId
+    ? db
+        .prepare(
+          'SELECT * FROM markdown_documents WHERE workspaceId = ? ORDER BY relativePath COLLATE NOCASE'
+        )
+        .all(workspaceId)
+    : db
+        .prepare('SELECT * FROM markdown_documents ORDER BY lastOpenedAt DESC, name COLLATE NOCASE')
+        .all()) as MarkdownDocumentRow[]
+  return rows.map(hydrateDocument)
+}
+
+export function listRecentMarkdownDocuments(limit = 12): MarkdownDocument[] {
+  const rows = db
+    .prepare('SELECT * FROM markdown_documents ORDER BY lastOpenedAt DESC LIMIT ?')
+    .all(limit) as MarkdownDocumentRow[]
+  return rows.map(hydrateDocument)
+}
+
+export function removeMarkdownDocument(path: string): void {
+  db.prepare('DELETE FROM markdown_documents WHERE path = ?').run(path)
+}
+
+export function moveMarkdownDocumentPath(
+  oldPath: string,
+  document: Omit<MarkdownDocument, 'tags'>,
+  content: string
+): MarkdownDocument {
+  const tags = documentTags(oldPath)
+  db.transaction(() => {
+    db.prepare('DELETE FROM markdown_documents WHERE path = ?').run(oldPath)
+    upsertMarkdownDocument(document, content)
+    const insert = db.prepare(
+      'INSERT OR IGNORE INTO document_tag_map (path, tagId) VALUES (?, ?)'
+    )
+    for (const tag of tags) insert.run(document.path, tag.id)
+  })()
+  return getMarkdownDocument(document.path)!
+}
+
+export function searchMarkdownDocuments(query: string): { document: MarkdownDocument; excerpt: string }[] {
+  const needle = `%${query.replace(/[\\%_]/g, '\\$&')}%`
+  const rows = db
+    .prepare(
+      `SELECT d.*, s.content FROM markdown_documents d
+       JOIN markdown_search s ON s.path = d.path
+       WHERE s.title LIKE ? ESCAPE '\\' OR s.content LIKE ? ESCAPE '\\'
+         OR EXISTS (
+           SELECT 1 FROM document_tag_map m
+           JOIN document_tags t ON t.id = m.tagId
+           WHERE m.path = d.path AND t.name LIKE ? ESCAPE '\\'
+         )
+       ORDER BY d.lastOpenedAt DESC LIMIT 100`
+    )
+    .all(needle, needle, needle) as (MarkdownDocumentRow & { content: string })[]
+  return rows.map((row) => {
+    const lower = row.content.toLocaleLowerCase()
+    const at = lower.indexOf(query.toLocaleLowerCase())
+    const excerpt = at < 0 ? row.content.slice(0, 140) : row.content.slice(Math.max(0, at - 50), at + 100)
+    const { content: _content, ...documentRow } = row
+    return { document: hydrateDocument(documentRow), excerpt: excerpt.replace(/\s+/g, ' ').trim() }
+  })
+}
+
+export function setMarkdownDocumentTags(path: string, names: string[]): DocumentTag[] {
+  const normalized = [...new Set(names.map((name) => name.trim()).filter(Boolean))]
+  db.transaction(() => {
+    db.prepare('DELETE FROM document_tag_map WHERE path = ?').run(path)
+    const upsertTag = db.prepare('INSERT OR IGNORE INTO document_tags (id, name) VALUES (?, ?)')
+    const getTag = db.prepare('SELECT id, name FROM document_tags WHERE name = ? COLLATE NOCASE')
+    const link = db.prepare('INSERT INTO document_tag_map (path, tagId) VALUES (?, ?)')
+    for (const name of normalized) {
+      upsertTag.run(crypto.randomUUID(), name)
+      const tag = getTag.get(name) as DocumentTag
+      link.run(path, tag.id)
+    }
+  })()
+  return documentTags(path)
+}
+
+export function getDocumentSession(): DocumentSession {
+  try {
+    const value = getSetting('markdownDocumentSession')
+    if (value) return JSON.parse(value) as DocumentSession
+  } catch {
+    // Corrupt session state should not prevent the document window from opening.
+  }
+  return { openPaths: [], activePath: null }
+}
+
+export function setDocumentSession(session: DocumentSession): void {
+  setSetting('markdownDocumentSession', JSON.stringify(session))
 }
 
 // ---------- 分类规则 ----------

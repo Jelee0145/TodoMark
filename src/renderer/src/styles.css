@@ -60,6 +60,128 @@ body {
   color: var(--color-ink);
 }
 
+/* ============ 独立 Markdown 文档窗口 ============ */
+.document-titlebar {
+  -webkit-app-region: drag;
+}
+.document-no-drag,
+.document-titlebar button {
+  -webkit-app-region: no-drag;
+}
+.document-workspace {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--color-graphite);
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+.document-workspace:hover,
+.document-workspace.active {
+  color: var(--color-ink);
+  background: var(--color-pure-white);
+}
+.document-workspace.active {
+  box-shadow: var(--shadow-subtle);
+}
+.document-file {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+.document-file:hover,
+.document-file.active {
+  background: var(--color-pure-white);
+}
+.document-file.active {
+  box-shadow: inset 3px 0 0 var(--color-rust);
+}
+.document-tab {
+  min-width: 130px;
+  max-width: 220px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px 0 13px;
+  border: 0;
+  border-radius: 9px 9px 0 0;
+  background: transparent;
+  color: var(--color-graphite);
+  font-size: 12px;
+  cursor: pointer;
+}
+.document-tab > span:first-child {
+  flex: 1;
+}
+.document-tab.active {
+  color: var(--color-ink);
+  background: var(--color-pure-white);
+  box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.04);
+}
+.document-tab-close {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+}
+.document-tab-close:hover {
+  background: var(--color-fog);
+}
+.document-action {
+  border: 0;
+  border-radius: 9999px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--color-graphite);
+  font-size: 11px;
+  cursor: pointer;
+}
+.document-action:hover {
+  color: var(--color-ink);
+  background: var(--color-fog);
+}
+.document-crepe {
+  --crepe-color-background: var(--color-pure-white);
+  --crepe-color-on-background: var(--color-ink);
+  --crepe-color-surface: var(--color-fog);
+  --crepe-color-on-surface: var(--color-ink);
+  --crepe-color-primary: var(--color-rust);
+  --crepe-color-on-primary: var(--color-pure-white);
+}
+.document-crepe .milkdown {
+  min-height: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 42px 64px 120px;
+  background: var(--color-pure-white);
+}
+.document-crepe .ProseMirror {
+  min-height: calc(100vh - 260px);
+  outline: none;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.75;
+}
+.document-crepe .ProseMirror h1,
+.document-crepe .ProseMirror h2 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+}
+
 /* 衬线显示字：仅大标题/大数字 */
 .serif {
   font-family: var(--font-serif);
