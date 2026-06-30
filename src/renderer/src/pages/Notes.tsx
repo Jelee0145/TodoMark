@@ -296,7 +296,7 @@ export function NotesPage() {
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 pb-4">
+        <div className="flex-1 overflow-y-auto px-2 pt-0.5 pb-4">
           {loading ? (
             <div className="px-3 flex flex-col gap-2">
               {Array.from({ length: 5 }).map((_, i) => (
