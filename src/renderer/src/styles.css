@@ -101,6 +101,91 @@ body {
   --acc-duration: 350ms;
   --panel-open: 400ms;
   --panel-close: 350ms;
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-chevron: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-panel-slide { transition: none !important; }
+}
+
+/* grid-template-rows 0fr → 1fr gives a clean height animation
+   with no JS measurement; the inner element clips overflow. */
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.t-acc-panel-inner {
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+/* Flip the chevron vertically to turn the "v" into a "^".
+   scaleY(-1) about the centre passes through a flat line at
+   the midpoint (same look as a `d:` path morph) but animates
+   in every browser, unlike CSS `d:` morphing (Chromium only).
+   The chevron path is symmetric about the 16x16 viewBox
+   centre, so the flip lands exactly on the "^"; non-scaling
+   -stroke keeps the stroke width constant through the flip. */
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+.t-acc-chevron path { vector-effect: non-scaling-stroke; }
+.t-acc[data-open="true"] .t-acc-chevron {
+  transform: scaleY(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-acc-panel, .t-acc-panel-inner, .t-acc-chevron {
+    transition: none !important;
+  }
 }
 
 /* ============ tabs (segmented, 无 pill 背景，激活用 ink 文字) ============ */
@@ -289,34 +374,6 @@ body {
   }
 }
 
-/* ============ accordion ============ */
-.t-acc-panel {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--acc-duration) var(--tabs-ease);
-  min-height: 0;
-}
-.t-acc-panel.is-open {
-  grid-template-rows: 1fr;
-}
-.t-acc-panel-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-.t-acc-chevron {
-  transform: scaleY(-1);
-  transition: transform var(--acc-duration) var(--tabs-ease);
-}
-.t-acc-trigger[aria-expanded='true'] .t-acc-chevron {
-  transform: scaleY(1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .t-acc-panel,
-  .t-acc-chevron {
-    transition: none;
-  }
-}
-
 /* ============ toast ============ */
 .t-toast {
   transform: translateY(-12px);
@@ -351,28 +408,27 @@ body {
   border-radius: 0 !important;
   box-shadow: none !important;
   --md-color: var(--color-ink) !important;
-  display: flex !important;
-  flex-direction: column !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  min-height: 0 !important;
 }
 .w-md-editor-content {
   position: relative !important;
-  flex: 1 1 auto !important;
   min-height: 0 !important;
-  height: 100% !important;
+  height: auto !important;
   overflow: hidden !important;
   background: var(--color-pure-white) !important;
 }
 .w-md-editor-show-live .w-md-editor-content::before {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
+  inset-block: 0;
   left: 50%;
+  z-index: 2;
   width: 1px;
   background: rgba(163, 166, 175, 0.42);
   transform: translateX(-0.5px);
   pointer-events: none;
-  z-index: 2;
 }
 .w-md-editor-preview {
   box-shadow: none !important;
@@ -382,6 +438,12 @@ body {
 .w-md-editor-area,
 .w-md-editor-text {
   background: var(--color-pure-white) !important;
+}
+.w-md-editor-show-live .w-md-editor-input,
+.w-md-editor-show-live .w-md-editor-preview {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: auto !important;
 }
 .w-md-editor-text-pre > code,
 .w-md-editor-text-input {
@@ -514,87 +576,180 @@ body {
   color: var(--color-graphite);
 }
 
-/* ============ todo dismiss（隐藏完成模式下，勾选后向右滑出+折叠） ============ */
-.t-todo {
-  transition: transform var(--panel-close) var(--tabs-ease),
-    opacity var(--panel-close) var(--tabs-ease),
-    max-height var(--panel-close) var(--tabs-ease),
-    margin var(--panel-close) var(--tabs-ease),
-    padding var(--panel-close) var(--tabs-ease),
-    filter var(--panel-close) var(--tabs-ease);
-  max-height: 200px;
-  overflow: hidden;
-  filter: blur(0);
+/* ============ 笔记列表卡片 ============ */
+.note-card {
+  transition: background-color 180ms ease, box-shadow 180ms ease;
 }
-.t-todo.is-leaving {
-  transform: translateX(48px);
-  opacity: 0;
-  filter: blur(3px);
-  max-height: 0;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  border-width: 0;
-}
-.t-todo.is-highlighted {
-  border-radius: var(--radius-3xl);
-  box-shadow: 0 0 0 2px var(--color-cool-blue), var(--shadow-lift);
-}
-.t-todo-card {
-  position: relative;
-  border-radius: 28px;
-  border: 1px solid rgba(163, 166, 175, 0.38);
-  background: linear-gradient(180deg, #ffffff 0%, #fbfbfc 100%);
-  box-shadow: rgba(4, 23, 43, 0.08) 0 0 0 1px,
-    rgba(23, 25, 28, 0.12) 0 12px 26px -18px,
-    rgba(23, 25, 28, 0.08) 0 3px 8px -5px;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease,
-    background 180ms ease;
-}
-.t-todo-card::before {
-  content: '';
-  position: absolute;
-  inset: 1px;
-  border-radius: 27px;
-  pointer-events: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
-}
-.t-todo:not([data-done='1']) .t-todo-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(163, 166, 175, 0.58);
-  box-shadow: rgba(4, 23, 43, 0.1) 0 0 0 1px,
-    rgba(23, 25, 28, 0.16) 0 16px 32px -18px,
-    rgba(23, 25, 28, 0.1) 0 5px 12px -6px;
-}
-.t-todo[data-done='1'] .t-todo-card {
-  background: #fcfcfd;
-  border-color: rgba(163, 166, 175, 0.3);
-  box-shadow: rgba(4, 23, 43, 0.05) 0 0 0 1px,
-    rgba(23, 25, 28, 0.08) 0 8px 18px -16px;
+.note-card:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--note-group-color) 18%, transparent),
+    0 12px 28px -18px color-mix(in srgb, var(--note-group-color) 42%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
-  .t-todo {
+  .note-card {
     transition: none;
-  }
-  .t-todo.is-leaving {
-    transform: none;
-    filter: none;
-  }
-  .t-todo-card {
-    transition: none;
-  }
-  .t-todo:not([data-done='1']) .t-todo-card:hover {
-    transform: none;
   }
 }
 
-/* ============ todo 已完成态过渡（显示完成模式下，就地变暗+划线） ============ */
-.t-todo-content {
-  transition: color 300ms ease-in-out, opacity 300ms ease-in-out;
+/* ============ 待办内联卡片 ============ */
+.todo-inline-card {
+  overflow: visible;
+  border: 1px solid rgba(163, 166, 175, 0.38);
+  border-radius: 20px;
+  background: var(--color-pure-white);
+  box-shadow: rgba(4, 23, 43, 0.05) 0 0 0 1px,
+    rgba(23, 25, 28, 0.09) 0 12px 24px -20px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
-.t-todo[data-done='1'] .t-todo-content {
-  opacity: 0.45;
+.todo-group-motion,
+.todo-inline-card.t-panel-slide,
+.todo-child-row.t-panel-slide {
+  --panel-translate-y: 12px;
+}
+.todo-inline-card:hover {
+  border-color: rgba(163, 166, 175, 0.62);
+  box-shadow: rgba(4, 23, 43, 0.07) 0 0 0 1px,
+    rgba(23, 25, 28, 0.12) 0 14px 28px -20px;
+}
+.todo-inline-card.is-editing,
+.todo-inline-card.is-highlighted {
+  border-color: var(--color-cool-blue);
+  box-shadow: 0 0 0 1px var(--color-cool-blue);
+}
+.todo-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 8px;
+}
+.todo-inline-title,
+.todo-inline-title-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: left;
+  outline: none;
+}
+.todo-inline-title-input::placeholder,
+.todo-child-input::placeholder {
+  color: var(--color-dove);
+}
+.todo-inline-title.is-done,
+.todo-child-title.is-done {
+  color: var(--color-graphite);
+  text-decoration: line-through;
+}
+.todo-inline-hint {
+  padding: 0 20px 18px 54px;
+  color: var(--color-dove);
+  font-size: 12px;
+}
+.todo-collapse-button,
+.todo-delete-button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  color: var(--color-dove);
+  transition: color 160ms ease, background 160ms ease, transform 180ms ease;
+}
+.todo-collapse-button:hover,
+.todo-delete-button:hover {
+  color: var(--color-ink);
+  background: var(--color-fog);
+}
+.todo-collapse-button.is-collapsed {
+  transform: rotate(-90deg);
+}
+.todo-delete-button:hover,
+.todo-child-delete:hover {
+  color: var(--color-rust);
+  background: var(--color-apricot-wash);
+}
+.todo-reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px 8px 54px;
+  color: var(--color-graphite);
+  font-size: 12px;
+  font-weight: 500;
+}
+.todo-reminder-row input {
+  margin-left: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--color-fog);
+  padding: 5px 8px;
+  color: var(--color-graphite);
+  font-size: 11px;
+  outline: none;
+}
+.todo-reminder-row input:focus {
+  box-shadow: 0 0 0 1px var(--color-cool-blue);
+}
+.todo-children {
+  padding: 2px 18px 14px 54px;
+}
+.todo-child-row {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 10px;
+  padding: 5px 8px;
+  transition: background 150ms ease;
+}
+.todo-child-row:hover {
+  background: var(--color-fog);
+}
+.todo-child-title,
+.todo-child-input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 14px;
+  line-height: 24px;
+  text-align: left;
+  outline: none;
+}
+.todo-child-delete {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  color: var(--color-dove);
+  opacity: 0;
+  transition: opacity 150ms ease, color 150ms ease, background 150ms ease;
+}
+.todo-child-row:hover .todo-child-delete,
+.todo-child-delete:focus-visible {
+  opacity: 1;
+}
+.todo-add-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 8px 0;
+  border-radius: 8px;
+  padding: 7px 8px;
+  color: var(--color-graphite);
+  font-size: 13px;
+  transition: color 150ms ease, background 150ms ease;
+}
+.todo-add-child:hover {
+  color: var(--color-ink);
+  background: var(--color-fog);
 }
 
 /* ============ 自定义复选框（带 success-check 描边动画） ============ */
@@ -602,7 +757,7 @@ body {
   position: relative;
   width: 22px;
   height: 22px;
-  border-radius: 9999px;
+  border-radius: 6px;
   border: 1.5px solid var(--color-dove);
   background: var(--color-pure-white);
   cursor: pointer;
@@ -610,6 +765,10 @@ body {
   transition: border-color 200ms ease, background 200ms ease;
   display: grid;
   place-items: center;
+}
+.t-check:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 .t-check:hover {
   border-color: var(--color-ink);

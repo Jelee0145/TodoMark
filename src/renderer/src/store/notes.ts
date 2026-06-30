@@ -14,6 +14,7 @@ interface NotesState {
   selectGroup: (id: string | null | undefined) => void
   selectNote: (id: string | null) => void
   createGroup: (name: string, color: string) => Promise<void>
+  deleteGroup: (id: string) => Promise<void>
   createNote: () => Promise<void>
   updateNote: (
     id: string,
@@ -47,6 +48,15 @@ export const useNotesStore = create<NotesState>((set, get) => ({
   createGroup: async (name, color) => {
     await ipc.groups.create(name, color)
     await get().loadGroups()
+  },
+  deleteGroup: async (id) => {
+    await ipc.groups.delete(id)
+    const wasSelected = get().selectedGroupId === id
+    set((state) => ({
+      groups: state.groups.filter((group) => group.id !== id),
+      selectedGroupId: wasSelected ? undefined : state.selectedGroupId
+    }))
+    await get().loadNotes(wasSelected ? undefined : get().selectedGroupId)
   },
   // 本地排序：pinned DESC, updatedAt DESC（与 SQL 一致）
   sortNotes(notes: Note[]): Note[] {

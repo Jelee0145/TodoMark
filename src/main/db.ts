@@ -13,6 +13,7 @@ import type {
   ReclassifyResult,
   TimeRiverPoint,
   Todo,
+  TodoGroup,
   TrendPoint
 } from '../shared/types'
 
@@ -64,6 +65,12 @@ function migrate(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_todos_remind ON todos(remindAt) WHERE done = 0;
 
+    CREATE TABLE IF NOT EXISTS todo_groups (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      createdAt INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS app_usage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sampleTs INTEGER NOT NULL,
@@ -89,6 +96,91 @@ function migrate(): void {
       value TEXT
     );
   `)
+
+  const todoColumns = db.prepare('PRAGMA table_info(todos)').all() as { name: string }[]
+  if (!todoColumns.some((column) => column.name === 'groupId')) {
+    db.exec('ALTER TABLE todos ADD COLUMN groupId TEXT REFERENCES todo_groups(id) ON DELETE CASCADE')
+  }
+  if (!todoColumns.some((column) => column.name === 'sort')) {
+    db.exec('ALTER TABLE todos ADD COLUMN sort INTEGER DEFAULT 0')
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_todos_group ON todos(groupId, sort)')
+
+  const groupColumns = db.prepare('PRAGMA table_info(todo_groups)').all() as { name: string }[]
+  const groupColumnMigrations = [
+    ['noteId', 'TEXT'],
+    ['done', 'INTEGER DEFAULT 0'],
+    ['dueAt', 'INTEGER'],
+    ['remindAt', 'INTEGER'],
+    ['notified', 'INTEGER DEFAULT 0']
+  ] as const
+  for (const [name, definition] of groupColumnMigrations) {
+    if (!groupColumns.some((column) => column.name === name)) {
+      db.exec(`ALTER TABLE todo_groups ADD COLUMN ${name} ${definition}`)
+    }
+  }
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_todo_groups_remind ON todo_groups(remindAt) WHERE done = 0'
+  )
+
+  if (getSetting('todo_groups_inline_v2_migrated') !== '1') {
+    db.transaction(() => {
+      const standalone = db.prepare('SELECT * FROM todos WHERE groupId IS NULL').all() as Todo[]
+      const insertGroup = db.prepare(
+        `INSERT OR IGNORE INTO todo_groups
+         (id, title, noteId, done, dueAt, remindAt, notified, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      for (const todo of standalone) {
+        insertGroup.run(
+          todo.id,
+          todo.title,
+          todo.noteId,
+          todo.done,
+          todo.dueAt,
+          todo.remindAt,
+          todo.done ? 1 : 0,
+          todo.createdAt
+        )
+      }
+      db.prepare('DELETE FROM todos WHERE groupId IS NULL').run()
+
+      const existingGroups = db.prepare('SELECT id FROM todo_groups').all() as { id: string }[]
+      const groupState = db.prepare(
+        `SELECT
+           COUNT(*) AS total,
+           SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) AS completed,
+           MIN(CASE WHEN done = 0 THEN remindAt END) AS earliestReminder,
+           MIN(CASE WHEN noteId IS NOT NULL THEN noteId END) AS noteId,
+           MIN(dueAt) AS dueAt
+         FROM todos WHERE groupId = ?`
+      )
+      const updateGroup = db.prepare(
+        `UPDATE todo_groups SET done = ?, remindAt = ?, notified = 0,
+         noteId = COALESCE(noteId, ?), dueAt = COALESCE(dueAt, ?) WHERE id = ?`
+      )
+      for (const group of existingGroups) {
+        const state = groupState.get(group.id) as {
+          total: number
+          completed: number
+          earliestReminder: number | null
+          noteId: string | null
+          dueAt: number | null
+        }
+        if (state.total > 0) {
+          updateGroup.run(
+            state.completed === state.total ? 1 : 0,
+            state.earliestReminder,
+            state.noteId,
+            state.dueAt,
+            group.id
+          )
+        }
+      }
+      db.prepare('UPDATE todos SET remindAt = NULL, notified = 0 WHERE groupId IS NOT NULL').run()
+      setSetting('todo_groups_inline_v2_migrated', '1')
+    })()
+  }
 }
 
 const DEFAULT_RULES: { pattern: string; category: Category }[] = [
@@ -447,7 +539,10 @@ export function updateGroup(id: string, name?: string, color?: string): void {
   ).run(name ?? null, color ?? null, id)
 }
 export function deleteGroup(id: string): void {
-  db.prepare('DELETE FROM groups WHERE id = ?').run(id)
+  db.transaction(() => {
+    db.prepare('UPDATE notes SET groupId = NULL WHERE groupId = ?').run(id)
+    db.prepare('DELETE FROM groups WHERE id = ?').run(id)
+  })()
 }
 
 export function listNotes(groupId?: string | null): Note[] {
@@ -514,32 +609,57 @@ export function deleteNote(id: string): void {
 
 // ---------- 待办 ----------
 export function listTodos(includeDone = false): Todo[] {
-  if (includeDone) {
-    return db.prepare('SELECT * FROM todos ORDER BY done, remindAt IS NULL, remindAt').all() as Todo[]
-  }
   return db
-    .prepare('SELECT * FROM todos WHERE done = 0 ORDER BY remindAt IS NULL, remindAt')
-    .all() as Todo[]
+    .prepare(
+      `SELECT t.* FROM todos t
+       JOIN todo_groups g ON g.id = t.groupId
+       WHERE ? = 1 OR g.done = 0
+       ORDER BY g.createdAt DESC, t.sort, t.createdAt`
+    )
+    .all(includeDone ? 1 : 0) as Todo[]
 }
 export function createTodo(t: Partial<Todo>): Todo {
+  if (!t.groupId) throw new Error('TODO_GROUP_REQUIRED')
+  const nextSort = db
+    .prepare('SELECT COALESCE(MAX(sort), -1) + 1 AS value FROM todos WHERE groupId = ?')
+    .get(t.groupId) as { value: number }
   const todo: Todo = {
     id: crypto.randomUUID(),
+    groupId: t.groupId,
+    sort: t.sort ?? nextSort.value,
     title: t.title ?? '新待办',
     noteId: t.noteId ?? null,
-    done: 0,
+    done: t.done ?? 0,
     dueAt: t.dueAt ?? null,
-    remindAt: t.remindAt ?? null,
+    remindAt: null,
     createdAt: Date.now()
   }
-  db.prepare(
-    'INSERT INTO todos (id, title, noteId, done, dueAt, remindAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(todo.id, todo.title, todo.noteId, todo.done, todo.dueAt, todo.remindAt, todo.createdAt)
+  db.transaction(() => {
+    db.prepare(
+      'INSERT INTO todos (id, groupId, sort, title, noteId, done, dueAt, remindAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      todo.id,
+      todo.groupId,
+      todo.sort,
+      todo.title,
+      todo.noteId,
+      todo.done,
+      todo.dueAt,
+      todo.remindAt,
+      todo.createdAt
+    )
+    syncTodoGroupDone(todo.groupId!)
+  })()
   return todo
 }
 export function updateTodo(id: string, patch: Partial<Todo>): void {
+  const current = db.prepare('SELECT groupId FROM todos WHERE id = ?').get(id) as
+    | { groupId: string | null }
+    | undefined
+  if (!current) return
   const sets: string[] = []
   const args: (string | number | null)[] = []
-  for (const k of ['title', 'dueAt', 'remindAt', 'noteId'] as const) {
+  for (const k of ['title', 'dueAt', 'noteId', 'sort'] as const) {
     if (patch[k] !== undefined) {
       sets.push(`${k} = ?`)
       args.push(patch[k] as string | number | null)
@@ -554,22 +674,123 @@ export function updateTodo(id: string, patch: Partial<Todo>): void {
   }
   if (!sets.length) return
   args.push(id)
-  db.prepare(`UPDATE todos SET ${sets.join(', ')} WHERE id = ?`).run(...args)
+  db.transaction(() => {
+    db.prepare(`UPDATE todos SET ${sets.join(', ')} WHERE id = ?`).run(...args)
+    if (current.groupId) syncTodoGroupDone(current.groupId)
+  })()
 }
 export function deleteTodo(id: string): void {
-  db.prepare('DELETE FROM todos WHERE id = ?').run(id)
+  const row = db.prepare('SELECT groupId FROM todos WHERE id = ?').get(id) as
+    | { groupId: string | null }
+    | undefined
+  db.transaction(() => {
+    db.prepare('DELETE FROM todos WHERE id = ?').run(id)
+    if (row?.groupId) syncTodoGroupDone(row.groupId)
+  })()
 }
 
-export function dueReminders(): Todo[] {
+function syncTodoGroupDone(groupId: string): void {
+  const state = db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+       SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) AS completed
+       FROM todos WHERE groupId = ?`
+    )
+    .get(groupId) as { total: number; completed: number }
+  if (state.total > 0) {
+    db.prepare('UPDATE todo_groups SET done = ? WHERE id = ?').run(
+      state.completed === state.total ? 1 : 0,
+      groupId
+    )
+  }
+}
+
+export function listTodoGroups(includeDone = false): TodoGroup[] {
+  return db
+    .prepare(
+      `SELECT * FROM todo_groups WHERE ? = 1 OR done = 0
+       ORDER BY done, remindAt IS NULL, remindAt, createdAt DESC`
+    )
+    .all(includeDone ? 1 : 0) as TodoGroup[]
+}
+
+export function createTodoGroup(title: string): TodoGroup {
+  const group: TodoGroup = {
+    id: crypto.randomUUID(),
+    title,
+    noteId: null,
+    done: 0,
+    dueAt: null,
+    remindAt: null,
+    notified: 0,
+    createdAt: Date.now()
+  }
+  db.prepare(
+    `INSERT INTO todo_groups
+     (id, title, noteId, done, dueAt, remindAt, notified, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    group.id,
+    group.title,
+    group.noteId,
+    group.done,
+    group.dueAt,
+    group.remindAt,
+    group.notified,
+    group.createdAt
+  )
+  return group
+}
+
+export function updateTodoGroup(id: string, patch: Partial<TodoGroup>): void {
+  if (patch.done !== undefined) {
+    toggleTodoGroup(id, patch.done)
+    return
+  }
+  const sets: string[] = []
+  const args: (string | number | null)[] = []
+  for (const key of ['title', 'noteId', 'dueAt', 'remindAt'] as const) {
+    if (patch[key] !== undefined) {
+      sets.push(`${key} = ?`)
+      args.push(patch[key])
+    }
+  }
+  if (patch.remindAt !== undefined) {
+    sets.push('notified = 0')
+  }
+  if (!sets.length) return
+  args.push(id)
+  db.prepare(`UPDATE todo_groups SET ${sets.join(', ')} WHERE id = ?`).run(...args)
+}
+
+export function toggleTodoGroup(id: string, done: number): void {
+  db.transaction(() => {
+    db.prepare('UPDATE todo_groups SET done = ?, notified = CASE WHEN ? = 1 THEN 1 ELSE notified END WHERE id = ?').run(
+      done,
+      done,
+      id
+    )
+    db.prepare('UPDATE todos SET done = ? WHERE groupId = ?').run(done, id)
+  })()
+}
+
+export function deleteTodoGroup(id: string): void {
+  db.transaction(() => {
+    db.prepare('DELETE FROM todos WHERE groupId = ?').run(id)
+    db.prepare('DELETE FROM todo_groups WHERE id = ?').run(id)
+  })()
+}
+
+export function dueReminders(): TodoGroup[] {
   const now = Date.now()
   return db
     .prepare(
-      `SELECT * FROM todos WHERE done = 0 AND notified = 0
+      `SELECT * FROM todo_groups WHERE done = 0 AND notified = 0
        AND remindAt IS NOT NULL AND remindAt <= ? ORDER BY remindAt`
     )
-    .all(now) as Todo[]
+    .all(now) as TodoGroup[]
 }
 
 export function markNotified(id: string): void {
-  db.prepare('UPDATE todos SET notified = 1 WHERE id = ?').run(id)
+  db.prepare('UPDATE todo_groups SET notified = 1 WHERE id = ?').run(id)
 }

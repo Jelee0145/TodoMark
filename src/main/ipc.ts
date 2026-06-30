@@ -39,6 +39,10 @@ export function registerIpc(): void {
   ipcMain.handle('todos:create', (_e, t) => db.createTodo(t))
   ipcMain.handle('todos:update', (_e, id: string, patch) => db.updateTodo(id, patch))
   ipcMain.handle('todos:delete', (_e, id: string) => db.deleteTodo(id))
+  ipcMain.handle('todoGroups:list', (_e, includeDone = false) => db.listTodoGroups(includeDone))
+  ipcMain.handle('todoGroups:create', (_e, title: string) => db.createTodoGroup(title))
+  ipcMain.handle('todoGroups:update', (_e, id: string, patch) => db.updateTodoGroup(id, patch))
+  ipcMain.handle('todoGroups:delete', (_e, id: string) => db.deleteTodoGroup(id))
 
   // ---------- 分类规则 ----------
   ipcMain.handle('rules:list', () => db.listRules())

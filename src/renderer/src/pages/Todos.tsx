@@ -1,88 +1,262 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTodosStore } from '@renderer/store/todos'
 import { Button } from '@renderer/components/ui/Button'
 import { Card } from '@renderer/components/ui/Card'
 import { EmptyState } from '@renderer/components/ui/EmptyState'
 import { Icon } from '@renderer/components/ui/Icon'
-import { Modal } from '@renderer/components/ui/Modal'
 import { showSuccessCheck } from '@renderer/components/ui/SuccessCheck'
-import { toDateIso } from '@renderer/lib/format'
-import type { Todo } from '@shared/types'
+import type { Todo, TodoGroup } from '@shared/types'
+
+interface EditingValue {
+  id: string
+  value: string
+}
+
+interface NewChildValue {
+  groupId: string
+  value: string
+  focusKey: number
+}
 
 export function TodosPage() {
-  const { todos, showDone, load, toggleDone, create, update, remove, setShowDone } =
-    useTodosStore()
+  const {
+    todos,
+    groups,
+    showDone,
+    load,
+    createGroup,
+    updateGroup,
+    toggleGroup,
+    removeGroup,
+    createTodo,
+    updateTodo,
+    toggleTodo,
+    removeTodo,
+    setShowDone
+  } = useTodosStore()
   const [searchParams] = useSearchParams()
-  const highlightedTodoId = searchParams.get('todoId')
-  const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState<Partial<Todo>>({ title: '' })
-  // 正在播放退场动画的待办 id
-  const [leaving, setLeaving] = useState<Set<string>>(new Set())
-  const timers = useRef<Map<string, number>>(new Map())
-  const todoRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const highlightedId = searchParams.get('todoId')
+  const [newGroupTitle, setNewGroupTitle] = useState<string | null>(null)
+  const [editingGroup, setEditingGroup] = useState<EditingValue | null>(null)
+  const [editingTodo, setEditingTodo] = useState<EditingValue | null>(null)
+  const [newChild, setNewChild] = useState<NewChildValue | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [openingGroups, setOpeningGroups] = useState<Set<string>>(new Set())
+  const [closingGroups, setClosingGroups] = useState<Set<string>>(new Set())
+  const [openingTodos, setOpeningTodos] = useState<Set<string>>(new Set())
+  const [closingTodos, setClosingTodos] = useState<Set<string>>(new Set())
+  const [newGroupVisible, setNewGroupVisible] = useState(false)
+  const [newChildVisible, setNewChildVisible] = useState(false)
+  const newGroupInputRef = useRef<HTMLInputElement>(null)
+  const groupInputRef = useRef<HTMLInputElement>(null)
+  const todoInputRef = useRef<HTMLInputElement>(null)
+  const newChildInputRef = useRef<HTMLInputElement>(null)
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const committing = useRef(new Set<string>())
 
   useEffect(() => {
     load()
-    const t = setInterval(load, 60_000)
-    return () => clearInterval(t)
+    const timer = setInterval(load, 60_000)
+    return () => clearInterval(timer)
   }, [load])
 
   useEffect(() => {
-    if (!highlightedTodoId) return
-    const id = window.setTimeout(() => {
-      todoRefs.current.get(highlightedTodoId)?.scrollIntoView({
-        block: 'center',
-        behavior: 'smooth'
-      })
-    }, 50)
-    return () => window.clearTimeout(id)
-  }, [highlightedTodoId, todos])
+    if (newGroupTitle !== null) newGroupInputRef.current?.focus()
+  }, [newGroupTitle])
 
-  // 组件卸载时清理所有退场计时器
   useEffect(() => {
-    return () => {
-      timers.current.forEach((id) => clearTimeout(id))
-      timers.current.clear()
-    }
-  }, [])
+    if (editingGroup) selectInput(groupInputRef.current)
+  }, [editingGroup?.id])
 
-  const handleToggle = (t: Todo) => {
-    if (!t.done && !showDone) {
-      // 未完成 → 完成，且不显示已完成：先播退场动画再真正标记
-      setLeaving((prev) => new Set(prev).add(t.id))
-      const id = window.setTimeout(() => {
-        toggleDone(t)
-        setLeaving((prev) => {
-          const next = new Set(prev)
-          next.delete(t.id)
-          return next
-        })
-        timers.current.delete(t.id)
-      }, 380)
-      timers.current.set(t.id, id)
-      showSuccessCheck('已完成')
-    } else {
-      // 显示已完成模式：就地切换（动画由 CSS data-done 控制）
-      // 或从已完成取消：直接切
-      toggleDone(t)
-      if (!t.done) showSuccessCheck('已完成')
+  useEffect(() => {
+    if (editingTodo) selectInput(todoInputRef.current)
+  }, [editingTodo?.id])
+
+  useEffect(() => {
+    if (newChild) newChildInputRef.current?.focus()
+  }, [newChild?.groupId, newChild?.focusKey])
+
+  useEffect(() => {
+    if (!highlightedId) return
+    const timer = window.setTimeout(() => {
+      cardRefs.current.get(highlightedId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 50)
+    return () => window.clearTimeout(timer)
+  }, [highlightedId, groups, todos])
+
+  const todosByGroup = useMemo(() => {
+    const result = new Map<string, Todo[]>()
+    for (const todo of todos) {
+      if (!todo.groupId) continue
+      const items = result.get(todo.groupId) ?? []
+      items.push(todo)
+      result.set(todo.groupId, items)
+    }
+    result.forEach((items) => items.sort((left, right) => left.sort - right.sort))
+    return result
+  }, [todos])
+
+  const runOnce = async (key: string, action: () => Promise<void>) => {
+    if (committing.current.has(key)) return
+    committing.current.add(key)
+    try {
+      await action()
+    } finally {
+      window.requestAnimationFrame(() => committing.current.delete(key))
     }
   }
 
-  const save = async () => {
-    if (!draft.title?.trim()) return
-    await create({ title: draft.title.trim(), remindAt: draft.remindAt ?? null })
-    setDraft({ title: '' })
-    setOpen(false)
+  const commitNewGroup = async (addChild: boolean) => {
+    const title = newGroupTitle?.trim() ?? ''
+    if (!title) {
+      if (!addChild) closeNewGroupDraft()
+      return
+    }
+    await runOnce('new-group', async () => {
+      const group = await createGroup(title)
+      setNewGroupTitle(null)
+      revealItem(group.id, setOpeningGroups)
+      if (addChild) {
+        setCollapsed((current) => without(current, group.id))
+        setNewChild({ groupId: group.id, value: '', focusKey: Date.now() })
+      }
+    })
   }
 
-  const toInputValue = (ms: number | null | undefined) =>
-    ms ? new Date(ms).toISOString().slice(0, 16) : ''
+  const commitGroupTitle = async (group: TodoGroup, addChild: boolean) => {
+    if (editingGroup?.id !== group.id) return
+    const title = editingGroup.value.trim()
+    if (!title) {
+      setEditingGroup(null)
+      return
+    }
+    await runOnce(`group:${group.id}`, async () => {
+      if (title !== group.title) await updateGroup(group.id, { title })
+      setEditingGroup(null)
+      if (addChild) beginNewChild(group.id)
+    })
+  }
+
+  const commitTodoTitle = async (todo: Todo, addNext: boolean) => {
+    if (editingTodo?.id !== todo.id) return
+    const title = editingTodo.value.trim()
+    if (!title) {
+      setEditingTodo(null)
+      return
+    }
+    await runOnce(`todo:${todo.id}`, async () => {
+      if (title !== todo.title) await updateTodo(todo.id, { title })
+      setEditingTodo(null)
+      if (addNext && todo.groupId) beginNewChild(todo.groupId)
+    })
+  }
+
+  const commitNewChild = async (continueAdding: boolean) => {
+    if (!newChild) return
+    const snapshot = newChild
+    const title = snapshot.value.trim()
+    if (!title) {
+      if (!continueAdding) closeNewChild()
+      return
+    }
+    await runOnce(`new-child:${snapshot.groupId}`, async () => {
+      const created = await createTodo(snapshot.groupId, title)
+      revealItem(created.id, setOpeningTodos)
+      if (continueAdding) {
+        setNewChild({ groupId: snapshot.groupId, value: '', focusKey: Date.now() })
+      } else {
+        await closeNewChild()
+      }
+    })
+  }
+
+  const beginNewChild = (groupId: string) => {
+    setCollapsed((current) => without(current, groupId))
+    setNewChildVisible(false)
+    setNewChild({ groupId, value: '', focusKey: Date.now() })
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => setNewChildVisible(true))
+    })
+  }
+
+  const openNewGroupDraft = () => {
+    setNewGroupVisible(false)
+    setNewGroupTitle('')
+    setEditingGroup(null)
+    setEditingTodo(null)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => setNewGroupVisible(true))
+    })
+  }
+
+  const closeNewGroupDraft = async () => {
+    setNewGroupVisible(false)
+    await waitForMotion('--panel-close-dur', 350)
+    setNewGroupTitle(null)
+  }
+
+  const closeNewChild = async () => {
+    setNewChildVisible(false)
+    await waitForMotion('--panel-close-dur', 350)
+    setNewChild(null)
+  }
+
+  const toggleCollapsed = (groupId: string) => {
+    setCollapsed((current) => {
+      const next = new Set(current)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
+
+  const confirmRemoveGroup = async (group: TodoGroup) => {
+    if (window.confirm(`确定删除“${group.title}”及其全部子待办吗？`)) {
+      setClosingGroups((current) => withValue(current, group.id))
+      await waitForMotion('--panel-close-dur', 350)
+      await removeGroup(group.id)
+      setClosingGroups((current) => without(current, group.id))
+    }
+  }
+
+  const confirmRemoveTodo = async (todo: Todo) => {
+    if (!window.confirm(`确定删除“${todo.title}”吗？`)) return
+    setClosingTodos((current) => withValue(current, todo.id))
+    await waitForMotion('--panel-close-dur', 350)
+    await removeTodo(todo.id)
+    setClosingTodos((current) => without(current, todo.id))
+  }
+
+  const handleToggleGroup = async (group: TodoGroup) => {
+    if (!group.done && !showDone) {
+      setClosingGroups((current) => withValue(current, group.id))
+      await waitForMotion('--panel-close-dur', 350)
+    }
+    try {
+      await toggleGroup(group)
+      if (!group.done) showSuccessCheck('已完成')
+    } finally {
+      setClosingGroups((current) => without(current, group.id))
+    }
+  }
+
+  const handleToggleTodo = async (todo: Todo) => {
+    if (!todo.done && !showDone) {
+      setClosingTodos((current) => withValue(current, todo.id))
+      await waitForMotion('--panel-close-dur', 350)
+    }
+    try {
+      await toggleTodo(todo)
+      if (!todo.done) showSuccessCheck('已完成')
+    } finally {
+      setClosingTodos((current) => without(current, todo.id))
+    }
+  }
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-[720px] mx-auto px-6 py-10">
+      <div className="max-w-[820px] mx-auto px-7 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
             <div className="title-eyebrow mb-1.5">Todos · 待办</div>
@@ -98,157 +272,333 @@ export function TodosPage() {
               onClick={() => setShowDone(!showDone)}
             >
               <span
-                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors ${
+                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
                   showDone ? 'bg-ink border-ink' : 'border-dove'
                 }`}
               >
-                {showDone && <Icon name="check" size={10} strokeWidth={2.5} className="text-pure-white" />}
+                {showDone && (
+                  <Icon name="check-simple" size={10} strokeWidth={2.5} className="text-pure-white" />
+                )}
               </span>
               显示已完成
             </button>
-            <Button onClick={() => setOpen(true)}>
+            <Button
+              onClick={openNewGroupDraft}
+            >
               <Icon name="plus" size={14} strokeWidth={1.8} />
               新建
             </Button>
           </div>
         </div>
 
-        {todos.length === 0 ? (
+        {groups.length === 0 && newGroupTitle === null ? (
           <Card>
             <EmptyState
               icon={<Icon name="check" size={44} strokeWidth={1.3} className="text-dove" />}
               title="没有待办"
-              desc="点击新建，到点会收到系统通知和应用内横幅"
-              action={<Button onClick={() => setOpen(true)}>添加第一个待办</Button>}
+              desc="点击新建后直接输入，按回车添加子待办"
+              action={<Button onClick={openNewGroupDraft}>添加第一个待办</Button>}
             />
           </Card>
         ) : (
-          <div className="flex flex-col gap-2.5">
-            {todos.map((t, i) => {
-              const overdue = t.remindAt !== null && t.remindAt < Date.now() && !t.done
-              const isLeaving = leaving.has(t.id)
-              const isHighlighted = highlightedTodoId === t.id
+          <div className="flex flex-col gap-3">
+            {newGroupTitle !== null && (
+              <section
+                className="todo-inline-card is-editing t-panel-slide"
+                data-open={newGroupVisible ? 'true' : 'false'}
+              >
+                <div className="todo-group-header">
+                  <CheckButton checked={false} disabled label="待办尚未保存" />
+                  <input
+                    ref={newGroupInputRef}
+                    className="todo-inline-title-input"
+                    value={newGroupTitle}
+                    placeholder="请输入标题"
+                    onChange={(event) => setNewGroupTitle(event.target.value)}
+                    onBlur={() => commitNewGroup(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        commitNewGroup(true)
+                      } else if (event.key === 'Escape') {
+                        closeNewGroupDraft()
+                      }
+                    }}
+                  />
+                </div>
+                <div className="todo-inline-hint">输入标题后按回车添加子待办</div>
+              </section>
+            )}
+
+            {groups.map((group, index) => {
+              const items = todosByGroup.get(group.id) ?? []
+              const completed = items.filter((todo) => todo.done === 1).length
+              const total = items.length || 1
+              const progress = items.length ? completed : group.done ? 1 : 0
+              const isCollapsed = collapsed.has(group.id)
+              const highlighted = highlightedId === group.id
               return (
                 <div
-                  key={t.id}
-                  ref={(node) => {
-                    if (node) {
-                      todoRefs.current.set(t.id, node)
-                    } else {
-                      todoRefs.current.delete(t.id)
-                    }
-                  }}
-                  className={`t-todo t-stagger ${isLeaving ? 'is-leaving' : ''} ${
-                    isHighlighted ? 'is-highlighted' : ''
-                  }`}
-                  data-done={t.done ? '1' : '0'}
-                  style={{ ['--stagger-i' as string]: Math.min(i, 8) }}
+                  key={group.id}
+                  className="t-stagger"
+                  style={{ ['--stagger-i' as string]: Math.min(index, 10) }}
                 >
-                  <Card
-                    data-done={t.done ? '1' : '0'}
-                    className="t-todo-card !p-4 flex items-start gap-3.5"
-                  >
-                    {/* 自定义复选框（带描边动画） */}
-                    <button
-                      className="t-check mt-0.5"
-                      data-checked={t.done ? '1' : '0'}
-                      onClick={() => handleToggle(t)}
-                      aria-label={t.done ? '标记未完成' : '标记完成'}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24">
-                        <path className="t-check-path" d="M5 12.5l4 4 10-11" />
-                      </svg>
-                    </button>
-
-                    <div className="t-todo-content flex-1 min-w-0">
-                      <div
-                        className={`text-[15px] font-medium ${
-                          t.done ? 'line-through text-graphite' : 'text-ink'
-                        }`}
-                      >
-                        {t.title}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-[12px] text-ash">
-                        {t.remindAt !== null && (
-                          <span
-                            className={`flex items-center gap-1 ${overdue ? 'text-rust' : ''}`}
-                          >
-                            <Icon name="clock" size={12} strokeWidth={1.7} />
-                            {toDateIso(t.remindAt).slice(5)}{' '}
-                            {new Date(t.remindAt).toTimeString().slice(0, 5)}
-                          </span>
-                        )}
-                        {t.dueAt !== null && (
-                          <span className="flex items-center gap-1">
-                            <Icon name="calendar" size={12} strokeWidth={1.7} />
-                            {toDateIso(t.dueAt).slice(5)}
-                          </span>
-                        )}
-                        {t.done === 1 && showDone && (
-                          <span className="text-dove">已完成</span>
-                        )}
-                      </div>
+                <div
+                  className="todo-group-motion t-panel-slide"
+                  data-open={
+                    openingGroups.has(group.id) || closingGroups.has(group.id) ? 'false' : 'true'
+                  }
+                >
+                <section
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(group.id, node)
+                    else cardRefs.current.delete(group.id)
+                  }}
+                  className={`todo-inline-card t-acc ${highlighted ? 'is-highlighted' : ''} ${
+                    editingGroup?.id === group.id ? 'is-editing' : ''
+                  }`}
+                  data-open={isCollapsed ? 'false' : 'true'}
+                >
+                  <div className="todo-group-header">
+                    <CheckButton
+                      checked={group.done === 1}
+                      label={group.done ? '标记未完成' : '完成全部待办'}
+                      onClick={() => handleToggleGroup(group)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      {editingGroup?.id === group.id ? (
+                        <input
+                          ref={groupInputRef}
+                          className="todo-inline-title-input"
+                          value={editingGroup.value}
+                          onChange={(event) =>
+                            setEditingGroup({ id: group.id, value: event.target.value })
+                          }
+                          onBlur={() => commitGroupTitle(group, false)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              commitGroupTitle(group, true)
+                            } else if (event.key === 'Escape') {
+                              setEditingGroup(null)
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          className={`todo-inline-title ${group.done ? 'is-done' : ''}`}
+                          onClick={() => setEditingGroup({ id: group.id, value: group.title })}
+                        >
+                          {group.title}
+                        </button>
+                      )}
                     </div>
-
-                    <div className="flex items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
-                      <input
-                        type="datetime-local"
-                        value={toInputValue(t.remindAt)}
-                        onChange={(e) =>
-                          update(t.id, {
-                            remindAt: e.target.value ? new Date(e.target.value).getTime() : null
-                          })
-                        }
-                        className="text-[11px] rounded-2xl border border-dove/60 bg-fog px-2 py-1 text-graphite focus:outline-none focus:border-rust"
-                      />
+                    <span className="text-[12px] text-dove tabular-nums">{progress} / {total}</span>
+                    {items.length > 0 && (
                       <button
-                        className="w-7 h-7 grid place-items-center rounded-full text-graphite hover:text-rust hover:bg-apricot-wash/60 transition-colors"
-                        onClick={() => remove(t.id)}
-                        aria-label="删除"
+                        className="todo-collapse-button"
+                        onClick={() => toggleCollapsed(group.id)}
+                        aria-label={isCollapsed ? '展开子待办' : '收起子待办'}
                       >
-                        <Icon name="trash" size={13} strokeWidth={1.7} />
+                        <span className="t-acc-chevron">
+                          <Icon name="chevron-down" size={14} />
+                        </span>
                       </button>
+                    )}
+                    <button
+                      className="todo-delete-button"
+                      onClick={() => confirmRemoveGroup(group)}
+                      aria-label="删除待办"
+                    >
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </div>
+
+                  <label className="todo-reminder-row">
+                    <Icon name="clock" size={15} strokeWidth={1.7} />
+                    <span>{group.remindAt ? '提醒时间' : '设置提醒'}</span>
+                    <input
+                      type="datetime-local"
+                      value={toLocalDateTime(group.remindAt)}
+                      onChange={(event) =>
+                        updateGroup(group.id, {
+                          remindAt: event.target.value ? new Date(event.target.value).getTime() : null
+                        })
+                      }
+                    />
+                  </label>
+
+                  <div className="t-acc-panel">
+                    <div className="t-acc-panel-inner">
+                    <div className="todo-children">
+                      {items.map((todo) => (
+                        <div
+                          key={todo.id}
+                          ref={(node) => {
+                            if (node) cardRefs.current.set(todo.id, node)
+                            else cardRefs.current.delete(todo.id)
+                          }}
+                          className="todo-child-row group t-panel-slide"
+                          data-open={
+                            openingTodos.has(todo.id) || closingTodos.has(todo.id) ? 'false' : 'true'
+                          }
+                        >
+                          <CheckButton
+                            checked={todo.done === 1}
+                            label={todo.done ? '标记未完成' : '标记完成'}
+                            onClick={() => handleToggleTodo(todo)}
+                          />
+                          {editingTodo?.id === todo.id ? (
+                            <input
+                              ref={todoInputRef}
+                              className="todo-child-input"
+                              value={editingTodo.value}
+                              onChange={(event) =>
+                                setEditingTodo({ id: todo.id, value: event.target.value })
+                              }
+                              onBlur={() => commitTodoTitle(todo, false)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  commitTodoTitle(todo, true)
+                                } else if (event.key === 'Escape') {
+                                  setEditingTodo(null)
+                                }
+                              }}
+                            />
+                          ) : (
+                            <button
+                              className={`todo-child-title ${todo.done ? 'is-done' : ''}`}
+                              onClick={() => setEditingTodo({ id: todo.id, value: todo.title })}
+                            >
+                              {todo.title}
+                            </button>
+                          )}
+                          <button
+                            className="todo-child-delete"
+                            onClick={() => confirmRemoveTodo(todo)}
+                            aria-label="删除子待办"
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
+                        </div>
+                      ))}
+
+                      {newChild?.groupId === group.id && (
+                        <div
+                          className="todo-child-row t-panel-slide"
+                          data-open={newChildVisible ? 'true' : 'false'}
+                        >
+                          <CheckButton checked={false} disabled label="子待办尚未保存" />
+                          <input
+                            ref={newChildInputRef}
+                            className="todo-child-input"
+                            value={newChild.value}
+                            placeholder="输入子待办"
+                            onChange={(event) =>
+                              setNewChild({ ...newChild, value: event.target.value })
+                            }
+                            onBlur={() => commitNewChild(false)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                commitNewChild(true)
+                              } else if (event.key === 'Escape') {
+                                closeNewChild()
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {newChild?.groupId !== group.id && (
+                        <button className="todo-add-child" onClick={() => beginNewChild(group.id)}>
+                          <Icon name="plus" size={14} strokeWidth={1.8} />
+                          添加子待办
+                        </button>
+                      )}
                     </div>
-                  </Card>
+                    </div>
+                  </div>
+                </section>
+                </div>
                 </div>
               )
             })}
           </div>
         )}
       </div>
-
-      {/* 新建 Modal（t-modal 缩放动效） */}
-      <Modal open={open} onClose={() => setOpen(false)} title="新建待办">
-        <input
-          className="w-full rounded-2xl border border-dove/60 bg-pure-white px-3.5 py-2.5 text-[15px] focus:outline-none focus:border-rust transition-colors"
-          placeholder="待办内容"
-          value={draft.title ?? ''}
-          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-          autoFocus
-        />
-        <div className="mt-3">
-          <label className="text-[12px] text-graphite flex items-center gap-1">
-            <Icon name="clock" size={12} strokeWidth={1.7} /> 提醒时间
-          </label>
-          <input
-            type="datetime-local"
-            className="w-full mt-1.5 rounded-2xl border border-dove/60 bg-pure-white px-3.5 py-2.5 text-[14px] focus:outline-none focus:border-rust transition-colors"
-            value={toInputValue(draft.remindAt)}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                remindAt: e.target.value ? new Date(e.target.value).getTime() : null
-              })
-            }
-          />
-        </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="link" onClick={() => setOpen(false)}>
-            取消
-          </Button>
-          <Button onClick={save}>保存</Button>
-        </div>
-      </Modal>
     </div>
   )
+}
+
+function CheckButton({
+  checked,
+  label,
+  disabled = false,
+  onClick
+}: {
+  checked: boolean
+  label: string
+  disabled?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <button
+      className="t-check shrink-0"
+      data-checked={checked ? '1' : '0'}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24">
+        <path className="t-check-path" d="M5 12.5l4 4 10-11" />
+      </svg>
+    </button>
+  )
+}
+
+function selectInput(input: HTMLInputElement | null): void {
+  if (!input) return
+  input.focus()
+  input.select()
+}
+
+function without(values: Set<string>, value: string): Set<string> {
+  const next = new Set(values)
+  next.delete(value)
+  return next
+}
+
+function withValue(values: Set<string>, value: string): Set<string> {
+  const next = new Set(values)
+  next.add(value)
+  return next
+}
+
+function revealItem(
+  id: string,
+  setItems: React.Dispatch<React.SetStateAction<Set<string>>>
+): void {
+  setItems((current) => withValue(current, id))
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      setItems((current) => without(current, id))
+    })
+  })
+}
+
+async function waitForMotion(variable: string, fallbackMs: number): Promise<void> {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(variable).trim()
+  const parsed = Number.parseFloat(raw)
+  const duration = Number.isFinite(parsed) ? parsed * (raw.endsWith('ms') ? 1 : 1000) : fallbackMs
+  await new Promise<void>((resolve) => window.setTimeout(resolve, duration))
+}
+
+function toLocalDateTime(ms: number | null): string {
+  if (!ms) return ''
+  const date = new Date(ms)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
 }

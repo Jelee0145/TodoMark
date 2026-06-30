@@ -45,6 +45,7 @@ export function NotesPage() {
     selectGroup,
     selectNote,
     createGroup,
+    deleteGroup,
     createNote,
     updateNote,
     deleteNote
@@ -81,6 +82,14 @@ export function NotesPage() {
   const [newGroupOpen, setNewGroupOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupColor, setNewGroupColor] = useState('#5d2a1a')
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!openMenu) return
+    const close = () => setOpenMenu(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [openMenu])
 
   // 编辑器本地受控态：镜像当前笔记的 title/content，输入即时反映、防抖落库
   // IME 兼容：不在 onChange 里做异步回填或门控，受控 value 与浏览器 IME 协同（React 17+ 已处理）；
@@ -144,6 +153,23 @@ export function NotesPage() {
     }
 
     await ipc.stickyNotes.open(activeNote.id)
+  }
+
+  const handleDeleteNote = async (id: string) => {
+    const note = notes.find((item) => item.id === id)
+    if (!window.confirm(`确定删除“${note?.title || '无标题'}”吗？此操作无法撤销。`)) return
+    if (id === activeNoteId) {
+      Object.values(debounceRef.current).forEach((timer) => timer && window.clearTimeout(timer))
+      debounceRef.current = {}
+    }
+    setOpenMenu(null)
+    await deleteNote(id)
+  }
+
+  const handleDeleteGroup = async (id: string, name: string) => {
+    if (!window.confirm(`确定删除分组“${name}”吗？分组内的笔记会移到未分组。`)) return
+    setOpenMenu(null)
+    await deleteGroup(id)
   }
 
   // 切换激活笔记时：冲刷上一条未落库输入，并同步 draft 到新笔记
@@ -219,6 +245,9 @@ export function NotesPage() {
               onClick={() => selectGroup(g.id)}
               icon={<span className="w-2 h-2 rounded-full shrink-0" style={{ background: g.color }} />}
               label={g.name}
+              menuOpen={openMenu === `group:${g.id}`}
+              onMenuToggle={() => setOpenMenu((value) => value === `group:${g.id}` ? null : `group:${g.id}`)}
+              onDelete={() => handleDeleteGroup(g.id, g.name)}
             />
           ))}
         </div>
@@ -267,18 +296,21 @@ export function NotesPage() {
               const active = activeNoteId === n.id
               const preview = n.content.replace(/[#*`>\-\[\]()!]/g, '').replace(/\s+/g, ' ').trim()
               return (
-                <div key={n.id} className="t-stagger" style={{ ['--stagger-i' as string]: Math.min(idx, 10) }}>
+                <div
+                  key={n.id}
+                  className="t-stagger relative group"
+                  style={{
+                    ['--stagger-i' as string]: Math.min(idx, 10),
+                    ['--note-group-color' as string]: grp?.color ?? '#17191c'
+                  }}
+                >
                 <button
-                  className={`relative w-full text-left rounded-2xl px-4 py-3 mb-1 transition-colors group ${
+                  className={`note-card relative w-full text-left rounded-2xl px-4 py-3 mb-1 group ${
                     active ? 'bg-fog' : 'hover:bg-fog/60'
                   }`}
                   onClick={() => selectNote(n.id)}
                 >
-                  {/* 选中态左侧 Rust 竖线 */}
-                  {active && (
-                    <span className="absolute left-0 top-3 bottom-3 w-[2px] rounded-full bg-rust" />
-                  )}
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 pr-7">
                     {n.pinned === 1 && (
                       <Icon name="pin" size={11} strokeWidth={1.8} className="text-rust shrink-0" />
                     )}
@@ -304,6 +336,41 @@ export function NotesPage() {
                     </span>
                   </div>
                 </button>
+                <button
+                  className="absolute right-3 top-3 z-10 w-7 h-7 grid place-items-center rounded-full text-graphite opacity-70 hover:opacity-100 hover:text-ink hover:bg-pure-white transition-colors"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpenMenu((value) => value === `note:${n.id}` ? null : `note:${n.id}`)
+                  }}
+                  aria-label={`打开“${n.title || '无标题'}”的更多操作`}
+                  aria-expanded={openMenu === `note:${n.id}`}
+                >
+                  <Icon name="more-horizontal" size={17} />
+                </button>
+                {openMenu === `note:${n.id}` && (
+                  <div
+                    className="absolute right-3 top-11 z-20 min-w-28 rounded-xl border border-dove/30 bg-pure-white p-1 shadow-[var(--shadow-card)]"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-ink hover:bg-fog"
+                      onClick={async () => {
+                        setOpenMenu(null)
+                        await updateNote(n.id, { pinned: n.pinned ? 0 : 1 })
+                      }}
+                    >
+                      <Icon name="pin" size={13} />
+                      {n.pinned ? '取消置顶' : '置顶'}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-rust hover:bg-apricot-wash/60"
+                      onClick={() => handleDeleteNote(n.id)}
+                    >
+                      <Icon name="trash" size={13} />
+                      删除
+                    </button>
+                  </div>
+                )}
                 </div>
               )
             })
@@ -322,7 +389,7 @@ export function NotesPage() {
       />
 
       {/* ===== 右：编辑器 ===== */}
-      <section ref={editorWrapRef} className="bg-pure-white flex flex-col flex-1 min-w-0 overflow-hidden">
+      <section ref={editorWrapRef} className="bg-pure-white flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
         {activeNote ? (
           <>
             <div className="px-7 pt-6 pb-4 border-b border-dove/30">
@@ -372,14 +439,14 @@ export function NotesPage() {
                 </button>
                 <button
                   className="w-8 h-8 grid place-items-center rounded-full text-graphite hover:text-rust hover:bg-apricot-wash/60 transition-colors"
-                  onClick={() => deleteNote(activeNote.id)}
+                  onClick={() => handleDeleteNote(activeNote.id)}
                   aria-label="删除"
                 >
                   <Icon name="trash" size={15} strokeWidth={1.7} />
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto" data-color-mode="light">
+            <div className="flex-1 min-h-0 overflow-hidden" data-color-mode="light">
               <MDEditor
                 key={activeNote.id}
                 value={contentDraft}
@@ -420,27 +487,62 @@ function GroupItem({
   onClick,
   icon,
   label,
-  count
+  count,
+  menuOpen,
+  onMenuToggle,
+  onDelete
 }: {
   active: boolean
   onClick: () => void
   icon: React.ReactNode
   label: string
   count?: number
+  menuOpen?: boolean
+  onMenuToggle?: () => void
+  onDelete?: () => void
 }) {
   return (
-    <button
+    <div className="relative group">
+      <button
       className={`w-full text-left rounded-full px-3 py-2 flex items-center gap-2.5 text-[14px] transition-colors ${
         active ? 'bg-pure-white text-ink font-medium shadow-[var(--shadow-subtle)]' : 'text-ash hover:bg-dove/15 hover:text-ink'
       }`}
       onClick={onClick}
     >
       {icon}
-      <span className="flex-1 truncate">{label}</span>
+      <span className={`flex-1 truncate ${onMenuToggle ? 'pr-7' : ''}`}>{label}</span>
       {count !== undefined && (
         <span className={`text-[11px] tabular-nums ${active ? 'text-graphite' : 'text-dove'}`}>{count}</span>
       )}
-    </button>
+      </button>
+      {onMenuToggle && (
+        <button
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 grid place-items-center rounded-full text-graphite opacity-70 hover:opacity-100 hover:text-ink hover:bg-fog transition-colors"
+          onClick={(event) => {
+            event.stopPropagation()
+            onMenuToggle()
+          }}
+          aria-label={`打开“${label}”的更多操作`}
+          aria-expanded={menuOpen}
+        >
+          <Icon name="more-horizontal" size={16} />
+        </button>
+      )}
+      {menuOpen && onDelete && (
+        <div
+          className="absolute right-1 top-9 z-20 min-w-28 rounded-xl border border-dove/30 bg-pure-white p-1 shadow-[var(--shadow-card)]"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] text-rust hover:bg-apricot-wash/60"
+            onClick={onDelete}
+          >
+            <Icon name="trash" size={13} />
+            删除分组
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

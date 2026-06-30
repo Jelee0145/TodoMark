@@ -42,9 +42,9 @@ export function SettingsPage() {
   }) => {
     const isOpen = openAcc === id
     return (
-      <Card className="!p-0 overflow-hidden">
+      <Card className="!p-0 overflow-hidden t-acc" data-open={isOpen ? 'true' : 'false'}>
         <button
-          className="t-acc-trigger w-full flex items-center justify-between px-6 py-5 text-left hover:bg-fog/60 transition-colors"
+          className="t-acc-head w-full flex items-center justify-between px-6 py-5 text-left hover:bg-fog/60 transition-colors"
           aria-expanded={isOpen}
           onClick={() => setOpenAcc(isOpen ? null : id)}
         >
@@ -61,7 +61,7 @@ export function SettingsPage() {
             style={{ vectorEffect: 'non-scaling-stroke' }}
           >
             <path
-              d="M4 10 L8 6 L12 10"
+              d="M4 6.5 L8 10.5 L12 6.5"
               stroke="currentColor"
               strokeWidth="1.6"
               strokeLinecap="round"
@@ -69,7 +69,7 @@ export function SettingsPage() {
             />
           </svg>
         </button>
-        <div className={`t-acc-panel ${isOpen ? 'is-open' : ''}`}>
+        <div className="t-acc-panel">
           {/* padding 放在内容 wrapper 上，避免折叠容器因 padding 残留高度 */}
           <div className="t-acc-panel-inner">
             <div className="px-6 pb-6 pt-1">{children}</div>

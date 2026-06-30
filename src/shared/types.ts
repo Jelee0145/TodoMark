@@ -22,11 +22,24 @@ export interface Note {
 
 export interface Todo {
   id: string
+  groupId: string | null
+  sort: number
   title: string
   noteId: string | null
   done: number
   dueAt: number | null
   remindAt: number | null
+  createdAt: number
+}
+
+export interface TodoGroup {
+  id: string
+  title: string
+  noteId: string | null
+  done: number
+  dueAt: number | null
+  remindAt: number | null
+  notified: number
   createdAt: number
 }
 

@@ -10,6 +10,7 @@ import type {
   RankItem,
   ReclassifyResult,
   Todo,
+  TodoGroup,
   TrendPoint,
   TimeRiverPoint,
   AppRule,
@@ -62,6 +63,14 @@ const api = {
     update: (id: string, patch: Partial<Todo>): Promise<void> =>
       ipcRenderer.invoke('todos:update', id, patch),
     delete: (id: string): Promise<void> => ipcRenderer.invoke('todos:delete', id)
+  },
+  todoGroups: {
+    list: (includeDone?: boolean): Promise<TodoGroup[]> =>
+      ipcRenderer.invoke('todoGroups:list', includeDone),
+    create: (title: string): Promise<TodoGroup> => ipcRenderer.invoke('todoGroups:create', title),
+    update: (id: string, patch: Partial<TodoGroup>): Promise<void> =>
+      ipcRenderer.invoke('todoGroups:update', id, patch),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke('todoGroups:delete', id)
   },
   rules: {
     list: (): Promise<AppRule[]> => ipcRenderer.invoke('rules:list'),

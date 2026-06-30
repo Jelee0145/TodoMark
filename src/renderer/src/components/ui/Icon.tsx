@@ -4,6 +4,7 @@ export type IconName =
   | 'dashboard'
   | 'note'
   | 'check'
+  | 'check-simple'
   | 'settings'
   | 'pause'
   | 'play'
@@ -23,6 +24,7 @@ export type IconName =
   | 'minimize'
   | 'maximize'
   | 'unmaximize'
+  | 'more-horizontal'
 
 interface Props {
   name: IconName
@@ -53,6 +55,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </>
   ),
+  'check-simple': <path d="M5 12.5l4.5 4.5L19 7.5" />,
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />
@@ -143,6 +146,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="5" y="5" width="14" height="14" rx="1.5" />
       <rect x="9" y="9" width="10" height="10" rx="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  'more-horizontal': (
+    <>
+      <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
     </>
   )
 }
