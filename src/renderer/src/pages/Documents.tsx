@@ -50,6 +50,7 @@ function MilkdownEditor({
         [Crepe.Feature.AI]: false,
         [Crepe.Feature.Latex]: true,
         [Crepe.Feature.Table]: true,
+        [Crepe.Feature.BlockEdit]: false,
         [Crepe.Feature.Toolbar]: true,
         [Crepe.Feature.TopBar]: true
       },

@@ -25,6 +25,7 @@ export type IconName =
   | 'minimize'
   | 'maximize'
   | 'unmaximize'
+  | 'chevron-left'
   | 'more-horizontal'
 
 interface Props {
@@ -115,6 +116,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   'chevron-down': <path d="M6 9l6 6 6-6" />,
   'chevron-right': <path d="M9 6l6 6-6 6" />,
+  'chevron-left': <path d="M15 6l-6 6 6 6" />,
   close: (
     <>
       <path d="M18 6L6 18M6 6l12 12" />

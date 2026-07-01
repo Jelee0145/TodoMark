@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import MDEditor from '@uiw/react-md-editor'
+import { Crepe } from '@milkdown/crepe'
+import '@milkdown/crepe/theme/common/style.css'
+import '@milkdown/crepe/theme/frame.css'
 import { useSearchParams } from 'react-router-dom'
 import { useNotesStore } from '@renderer/store/notes'
 import { Button } from '@renderer/components/ui/Button'
 import { Pill } from '@renderer/components/ui/Pill'
 import { EmptyState } from '@renderer/components/ui/EmptyState'
+import { NotesToolbar } from '@renderer/components/notes/NotesToolbar'
 import { Icon } from '@renderer/components/ui/Icon'
 import { Resizer } from '@renderer/components/ui/Resizer'
 import { ipc } from '@renderer/lib/ipc'
@@ -32,6 +35,58 @@ function loadWidths(): { sidebar: number; list: number } {
   return DEFAULT_W
 }
 
+function MilkdownEditor({
+  content,
+  onChange,
+  crepeRef
+}: {
+  content: string
+  onChange: (markdown: string) => void
+  crepeRef: React.MutableRefObject<Crepe | null>
+}) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useEffect(() => {
+    if (!rootRef.current) return
+    let disposed = false
+    const crepe = new Crepe({
+      root: rootRef.current,
+      defaultValue: content,
+      features: {
+        [Crepe.Feature.AI]: false,
+        [Crepe.Feature.Latex]: true,
+        [Crepe.Feature.Table]: true,
+        [Crepe.Feature.BlockEdit]: false,
+        [Crepe.Feature.Toolbar]: false,
+        [Crepe.Feature.TopBar]: false
+      },
+      featureConfigs: {
+        [Crepe.Feature.Placeholder]: { text: '开始写作…' }
+      }
+    })
+    crepe.on((listener) => {
+      listener.markdownUpdated((_ctx, markdown, previousMarkdown) => {
+        if (!disposed && markdown !== previousMarkdown) onChangeRef.current(markdown)
+      })
+    })
+    void crepe.create().then(() => {
+      if (!disposed) crepeRef.current = crepe
+    })
+    return () => {
+      disposed = true
+      crepeRef.current = null
+      void crepe.destroy()
+    }
+    // `content` is the mount-time value; live changes flow through markdownUpdated.
+    // Including it would destroy and recreate Crepe after every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return <div ref={rootRef} className="h-full notes-crepe" />
+}
+
 export function NotesPage() {
   const [searchParams] = useSearchParams()
   const routeNoteId = searchParams.get('noteId')
@@ -55,6 +110,8 @@ export function NotesPage() {
   const [widths, setWidths] = useState(loadWidths)
   const widthsRef = useRef(widths)
   widthsRef.current = widths
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     loadGroups()
@@ -105,46 +162,14 @@ export function NotesPage() {
     setOpenMenu((v) => (v === key ? null : key))
   }
 
+  const crepeRef = useRef<Crepe | null>(null)
+
   // 编辑器本地受控态：镜像当前笔记的 title/content，输入即时反映、防抖落库
   // IME 兼容：不在 onChange 里做异步回填或门控，受控 value 与浏览器 IME 协同（React 17+ 已处理）；
   // 中文输入问题的真因是旧 store 的 loadNotes→骨架重建链路，现已用乐观更新切断，无需 composition 门控。
   const [titleDraft, setTitleDraft] = useState('')
   const [contentDraft, setContentDraft] = useState('')
   const debounceRef = useRef<Record<string, number>>({})
-
-  // MD 编辑器全屏兜底：监听 fullscreen class 变化，强制 inline style 覆盖库默认的 top:0/z-index:99999
-  // inline style + setProperty('!important') 是最高优先级，确保不盖住 TopBar
-  const editorWrapRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const wrap = editorWrapRef.current
-    if (!wrap) return
-    const fixFullscreen = () => {
-      const el = wrap.querySelector('.w-md-editor')
-      if (!el) return
-      const isFs = (el as HTMLElement).classList.contains('w-md-editor-fullscreen')
-      const h = getComputedStyle(document.documentElement).getPropertyValue('--topbar-h').trim() || '64px'
-      const s = (el as HTMLElement).style
-      if (isFs) {
-        s.setProperty('position', 'fixed', 'important')
-        s.setProperty('top', `calc(var(--app-window-inset, 0px) + ${h})`, 'important')
-        s.setProperty('left', 'var(--app-window-inset, 0px)', 'important')
-        s.setProperty('right', 'var(--app-window-inset, 0px)', 'important')
-        s.setProperty('bottom', 'var(--app-window-inset, 0px)', 'important')
-        s.setProperty('width', 'auto', 'important')
-        s.setProperty('height', 'auto', 'important')
-        s.setProperty('z-index', '60', 'important')
-        s.setProperty('background', '#ffffff', 'important')
-      } else {
-        ;['position', 'top', 'left', 'right', 'bottom', 'width', 'height', 'z-index', 'background'].forEach(
-          (prop) => s.removeProperty(prop)
-        )
-      }
-    }
-    const mo = new MutationObserver(fixFullscreen)
-    mo.observe(wrap, { attributes: true, attributeFilter: ['class'], subtree: true })
-    fixFullscreen()
-    return () => mo.disconnect()
-  }, [activeNote?.id])
 
   const commitField = (id: string, field: 'title' | 'content', value: string) => {
     if (debounceRef.current[field]) window.clearTimeout(debounceRef.current[field]!)
@@ -198,85 +223,138 @@ export function NotesPage() {
     <div className="h-full flex overflow-hidden">
       {/* ===== 左：分组 ===== */}
       <aside
-        className="bg-fog flex flex-col shrink-0"
-        style={{ width: widths.sidebar }}
+        className={`bg-fog flex flex-col shrink-0 notes-sidebar${sidebarCollapsed ? ' is-collapsed' : ''}`}
+        style={{ width: sidebarCollapsed ? 48 : widths.sidebar }}
       >
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-          <span className="title-eyebrow">分组</span>
-          <button
-            className="w-7 h-7 grid place-items-center rounded-full text-graphite hover:text-ink hover:bg-dove/20 transition-colors"
-            onClick={() => setNewGroupOpen((v) => !v)}
-            aria-label="新建分组"
-          >
-            <Icon name="plus" size={15} strokeWidth={1.8} />
-          </button>
-        </div>
-
-        {newGroupOpen && (
-          <div className="px-4 pb-3 flex flex-col gap-2">
-            <input
-              className="rounded-2xl border border-dove/60 bg-pure-white px-3 py-1.5 text-[13px] focus:outline-none focus:border-rust transition-colors"
-              placeholder="分组名"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              autoFocus
-            />
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={newGroupColor}
-                onChange={(e) => setNewGroupColor(e.target.value)}
-                className="w-7 h-7 rounded-full cursor-pointer bg-transparent border-0"
-              />
-              <Button
-                size="sm"
-                onClick={async () => {
-                  if (newGroupName.trim()) {
-                    await createGroup(newGroupName.trim(), newGroupColor)
-                    setNewGroupName('')
-                    setNewGroupOpen(false)
-                  }
-                }}
+        {sidebarCollapsed ? (
+          <>
+            <div className="px-2 pt-5 pb-3 flex items-center justify-center">
+              <button
+                className="w-7 h-7 grid place-items-center rounded-full text-graphite hover:text-ink hover:bg-dove/20 transition-colors"
+                onClick={() => setSidebarCollapsed(false)}
+                aria-label="展开分组栏"
+                title="展开分组栏"
               >
-                创建
-              </Button>
+                <Icon name="chevron-right" size={15} strokeWidth={1.8} />
+              </button>
             </div>
-          </div>
-        )}
+            <div className="flex-1 overflow-y-auto px-1.5 pt-0.5 pb-4 space-y-0.5">
+              <button
+                className={`notes-sidebar-icon${selectedGroupId === undefined ? ' is-active' : ''}`}
+                onClick={() => selectGroup(undefined)}
+                title={`全部笔记 (${notes.length})`}
+                aria-label="全部笔记"
+              >
+                <Icon name="layers" size={15} strokeWidth={1.6} className="opacity-70" />
+              </button>
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  className={`notes-sidebar-icon${selectedGroupId === g.id ? ' is-active' : ''}`}
+                  onClick={() => selectGroup(g.id)}
+                  title={g.name}
+                  aria-label={g.name}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ background: g.color }}
+                  />
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+              <span className="title-eyebrow">分组</span>
+              <div className="flex items-center gap-1">
+                <button
+                  className="w-7 h-7 grid place-items-center rounded-full text-graphite hover:text-ink hover:bg-dove/20 transition-colors"
+                  onClick={() => setNewGroupOpen((v) => !v)}
+                  aria-label="新建分组"
+                >
+                  <Icon name="plus" size={15} strokeWidth={1.8} />
+                </button>
+                <button
+                  className="w-7 h-7 grid place-items-center rounded-full text-graphite hover:text-ink hover:bg-dove/20 transition-colors"
+                  onClick={() => setSidebarCollapsed(true)}
+                  aria-label="收起分组栏"
+                  title="收起分组栏"
+                >
+                  <Icon name="chevron-left" size={15} strokeWidth={1.8} />
+                </button>
+              </div>
+            </div>
 
-        <div className="flex-1 overflow-y-auto px-3 pt-0.5 pb-4 space-y-0.5">
-          <GroupItem
-            active={selectedGroupId === undefined}
-            onClick={() => selectGroup(undefined)}
-            icon={<Icon name="layers" size={15} strokeWidth={1.6} className="opacity-70" />}
-            label="全部笔记"
-            count={notes.length}
-          />
-          {groups.map((g) => (
-            <GroupItem
-              key={g.id}
-              active={selectedGroupId === g.id}
-              onClick={() => selectGroup(g.id)}
-              icon={<span className="w-2 h-2 rounded-full shrink-0" style={{ background: g.color }} />}
-              label={g.name}
-              menuOpen={openMenu === `group:${g.id}`}
-              onMenuToggle={(anchor) => openMenuAt(`group:${g.id}`, anchor)}
-              onDelete={() => handleDeleteGroup(g.id, g.name)}
-              menuPos={openMenu === `group:${g.id}` ? menuPos : null}
-            />
-          ))}
-        </div>
+            {newGroupOpen && (
+              <div className="px-4 pb-3 flex flex-col gap-2">
+                <input
+                  className="rounded-2xl border border-dove/60 bg-pure-white px-3 py-1.5 text-[13px] focus:outline-none focus:border-rust transition-colors"
+                  placeholder="分组名"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={newGroupColor}
+                    onChange={(e) => setNewGroupColor(e.target.value)}
+                    className="w-7 h-7 rounded-full cursor-pointer bg-transparent border-0"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (newGroupName.trim()) {
+                        await createGroup(newGroupName.trim(), newGroupColor)
+                        setNewGroupName('')
+                        setNewGroupOpen(false)
+                      }
+                    }}
+                  >
+                    创建
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto px-3 pt-0.5 pb-4 space-y-0.5">
+              <GroupItem
+                active={selectedGroupId === undefined}
+                onClick={() => selectGroup(undefined)}
+                icon={<Icon name="layers" size={15} strokeWidth={1.6} className="opacity-70" />}
+                label="全部笔记"
+                count={notes.length}
+              />
+              {groups.map((g) => (
+                <GroupItem
+                  key={g.id}
+                  active={selectedGroupId === g.id}
+                  onClick={() => selectGroup(g.id)}
+                  icon={<span className="w-2 h-2 rounded-full shrink-0" style={{ background: g.color }} />}
+                  label={g.name}
+                  menuOpen={openMenu === `group:${g.id}`}
+                  onMenuToggle={(anchor) => openMenuAt(`group:${g.id}`, anchor)}
+                  onDelete={() => handleDeleteGroup(g.id, g.name)}
+                  menuPos={openMenu === `group:${g.id}` ? menuPos : null}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </aside>
 
-      <Resizer
-        onResize={(dx) =>
-          setWidths((w) => ({
-            ...w,
-            sidebar: Math.min(MAX.sidebar, Math.max(MIN.sidebar, w.sidebar + dx))
-          }))
-        }
-        onResizeEnd={persist}
-      />
+      {!sidebarCollapsed && (
+        <Resizer
+          onResize={(dx) =>
+            setWidths((w) => ({
+              ...w,
+              sidebar: Math.min(MAX.sidebar, Math.max(MIN.sidebar, w.sidebar + dx))
+            }))
+          }
+          onResizeEnd={persist}
+        />
+      )}
 
       {/* ===== 中：笔记列表 ===== */}
       <aside className="bg-pure-white flex flex-col shrink-0" style={{ width: widths.list }}>
@@ -407,7 +485,7 @@ export function NotesPage() {
       />
 
       {/* ===== 右：编辑器 ===== */}
-      <section ref={editorWrapRef} className="bg-pure-white flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+      <section className="bg-pure-white flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
         {activeNote ? (
           <>
             <div className="px-7 pt-6 pb-4 border-b border-dove/30">
@@ -464,21 +542,19 @@ export function NotesPage() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-hidden relative" data-color-mode="light">
-              <MDEditor
-                key={activeNote.id}
-                value={contentDraft}
-                height="100%"
-                visibleDragbar={false}
-                style={{ height: '100%' }}
-                onChange={(val) => {
-                  const v = val ?? ''
-                  setContentDraft(v)
-                  commitField(activeNote.id, 'content', v)
-                }}
-                preview="live"
-                hideToolbar={false}
-              />
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden" data-color-mode="light">
+              <NotesToolbar crepeRef={crepeRef} />
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <MilkdownEditor
+                  key={activeNote.id}
+                  content={activeNote.content}
+                  crepeRef={crepeRef}
+                  onChange={(markdown) => {
+                    setContentDraft(markdown)
+                    commitField(activeNote.id, 'content', markdown)
+                  }}
+                />
+              </div>
             </div>
           </>
         ) : (

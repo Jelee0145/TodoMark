@@ -1,8 +1,36 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import MDEditor from '@uiw/react-md-editor'
+import { Crepe } from '@milkdown/crepe'
+import '@milkdown/crepe/theme/common/style.css'
+import '@milkdown/crepe/theme/frame.css'
 import { Icon } from '@renderer/components/ui/Icon'
 import type { Note } from '@shared/types'
+
+function StickyReadOnlyEditor({ content }: { content: string }) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!rootRef.current) return
+    const crepe = new Crepe({
+      root: rootRef.current,
+      defaultValue: content,
+      features: {
+        [Crepe.Feature.AI]: false,
+        [Crepe.Feature.Latex]: true,
+        [Crepe.Feature.Table]: true,
+        [Crepe.Feature.BlockEdit]: false,
+        [Crepe.Feature.Toolbar]: false,
+        [Crepe.Feature.TopBar]: false
+      }
+    })
+    crepe.setReadonly(true)
+    void crepe.create()
+    return () => {
+      void crepe.destroy()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return <div ref={rootRef} className="h-full sticky-crepe" />
+}
 
 export function StickyNotePage() {
   const params = useParams<{ noteId: string }>()
@@ -87,10 +115,7 @@ export function StickyNotePage() {
               <div className="t-skel h-4 w-5/6" />
             </div>
           ) : note ? (
-            <MDEditor.Markdown
-              source={note.content || '空笔记'}
-              className="sticky-note-markdown"
-            />
+            <StickyReadOnlyEditor content={note.content || '空笔记'} />
           ) : (
             <div className="h-full grid place-items-center text-center">
               <div>

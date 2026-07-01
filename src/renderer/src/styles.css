@@ -158,8 +158,11 @@ body {
 .document-crepe .milkdown {
   min-height: 100%;
   margin: 0 auto;
-  padding: 42px 64px 120px;
+  padding: 28px 32px 96px;
   background: var(--color-pure-white);
+}
+.document-crepe--wide .milkdown {
+  max-width: 880px;
 }
 .document-crepe--narrow .milkdown {
   max-width: 720px;
@@ -171,11 +174,46 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.75;
+  padding: 0 !important;
 }
 .document-crepe .ProseMirror h1,
 .document-crepe .ProseMirror h2 {
   font-family: var(--font-serif);
   font-weight: 600;
+}
+
+/* 代码块去重（Direction B + 光标进入才显示语言选择器） */
+.document-crepe .milkdown-code-block {
+  background: var(--color-fog) !important;
+  padding: 10px 14px !important;
+  border-radius: 6px !important;
+  margin: 12px 0 !important;
+  border: 0 !important;
+}
+.document-crepe .milkdown-code-block .cm-editor,
+.document-crepe .milkdown-code-block .cm-gutters,
+.document-crepe .milkdown-code-block .cm-panel {
+  background: transparent !important;
+}
+.document-crepe .milkdown-code-block .cm-gutters {
+  color: var(--color-dove) !important;
+  padding-right: 10px !important;
+}
+.document-crepe .milkdown-code-block .cm-activeLineGutter,
+.document-crepe .milkdown-code-block .cm-activeLine {
+  background: transparent !important;
+  color: var(--color-graphite) !important;
+}
+.document-crepe .milkdown-code-block .language-picker {
+  display: none !important;
+}
+.document-crepe .milkdown-code-block:has(.cm-editor.cm-focused) .language-picker {
+  display: block !important;
+}
+.document-crepe .milkdown-code-block.selected {
+  outline: none !important;
+  border-left: 2px solid var(--color-rust) !important;
+  padding-left: 12px !important;
 }
 
 /* 衬线显示字：仅大标题/大数字 */
@@ -520,93 +558,252 @@ body {
   }
 }
 
-/* ============ md-editor 浅底适配 ============ */
-.w-md-editor {
-  background: transparent !important;
-  color: var(--color-ink) !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  --md-color: var(--color-ink) !important;
-  position: absolute !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  display: grid !important;
-  grid-template-rows: auto minmax(0, 1fr) !important;
-  min-height: 0 !important;
+/* ============ notes editor toolbar (Steep style) ============ */
+.ntb-root {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(163, 166, 175, 0.3);
+  background: var(--color-pure-white);
+  font-family: var(--font-sans);
+  flex-wrap: wrap;
+  min-height: 44px;
 }
-.w-md-editor-show-live::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
+.ntb-btn,
+.ntb-text-btn {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-graphite);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.009em;
+  transition: background 140ms ease, color 140ms ease;
+}
+.ntb-btn:hover,
+.ntb-text-btn:hover {
+  background: var(--color-fog);
+  color: var(--color-ink);
+}
+.ntb-btn.is-active,
+.ntb-text-btn.is-active {
+  background: var(--color-fog);
+  color: var(--color-ink);
+}
+.ntb-btn.is-highlight {
+  color: var(--color-ink);
+}
+.ntb-text-btn {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  min-width: 30px;
+  color: var(--color-ash);
+}
+.ntb-text-btn:hover {
+  color: var(--color-ink);
+}
+.ntb-divider {
+  display: inline-block;
   width: 1px;
+  height: 14px;
   background: rgba(163, 166, 175, 0.3);
-  transform: translateX(-0.5px);
-  z-index: 1;
-  pointer-events: none;
+  margin: 0 6px;
 }
-.w-md-editor-toolbar {
-  position: relative !important;
-  z-index: 2 !important;
-  background: var(--color-pure-white) !important;
+.ntb-more-wrap {
+  position: relative;
 }
-.w-md-editor-content {
-  position: relative !important;
-  min-height: 0 !important;
-  height: auto !important;
-  overflow: hidden !important;
-  background: var(--color-pure-white) !important;
+.ntb-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background: var(--color-pure-white);
+  border: 1px solid rgba(163, 166, 175, 0.3);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.w-md-editor-preview {
-  box-shadow: none !important;
-  background: var(--color-pure-white) !important;
+.ntb-more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-graphite);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: -0.009em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
 }
-.w-md-editor-input,
-.w-md-editor-area,
-.w-md-editor-text {
-  background: var(--color-pure-white) !important;
-}
-.w-md-editor-show-live .w-md-editor-input,
-.w-md-editor-show-live .w-md-editor-preview {
-  height: 100% !important;
-  min-height: 0 !important;
-  overflow: auto !important;
-}
-.w-md-editor-text-pre > code,
-.w-md-editor-text-input {
-  font-family: var(--font-sans) !important;
-  font-size: 15px !important;
-  line-height: 1.6 !important;
-  color: var(--color-ink) !important;
+.ntb-more-menu button:hover {
+  background: var(--color-fog);
+  color: var(--color-ink);
 }
 
-/* MD 编辑器全屏：不盖住自定义 TopBar（窗口控制栏），实体白底可读 */
-.w-md-editor.w-md-editor-fullscreen {
-  position: fixed !important;
-  top: calc(var(--app-window-inset, 0px) + var(--topbar-h)) !important;
-  left: var(--app-window-inset, 0px) !important;
-  right: var(--app-window-inset, 0px) !important;
-  bottom: var(--app-window-inset, 0px) !important;
-  width: auto !important;
-  height: auto !important;
-  z-index: 40 !important; /* 低于 sticky TopBar 的 z-50 */
-  background: var(--color-pure-white) !important;
-  z-index: 60 !important;
-  box-shadow: none !important;
+/* 工具栏弹窗：图片/链接输入（替代 window.prompt，Electron 里被禁了） */
+.ntb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  font-family: var(--font-sans);
 }
-.w-md-editor.w-md-editor-fullscreen .w-md-editor-content,
-.w-md-editor.w-md-editor-fullscreen .w-md-editor-preview,
-.w-md-editor.w-md-editor-fullscreen .wmde-markdown,
-.w-md-editor.w-md-editor-fullscreen .w-md-editor-text-pre,
-.w-md-editor.w-md-editor-fullscreen .w-md-editor-text {
-  background: var(--color-pure-white) !important;
+.ntb-modal {
+  background: var(--color-pure-white);
+  border-radius: 12px;
+  padding: 20px 24px;
+  width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.w-md-editor.w-md-editor-fullscreen .w-md-editor-toolbar {
+.ntb-modal-title {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+.ntb-modal-input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(163, 166, 175, 0.45);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink);
+  background: var(--color-pure-white);
+  outline: none;
+  transition: border-color 140ms ease;
+}
+.ntb-modal-input:focus {
+  border-color: var(--color-rust);
+}
+.ntb-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ntb-modal-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.009em;
+  color: var(--color-graphite);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.ntb-modal-btn:hover {
+  background: var(--color-fog);
+  color: var(--color-ink);
+}
+.ntb-modal-btn.is-primary {
+  background: var(--color-ink);
+  color: var(--color-pure-white);
+}
+.ntb-modal-btn.is-primary:hover {
+  background: var(--color-graphite);
+}
+.ntb-modal-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Notes 分组栏：收起态图标按钮 */
+.notes-sidebar-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-graphite);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.notes-sidebar-icon:hover {
+  background: var(--color-dove);
+  background: rgba(163, 166, 175, 0.18);
+  color: var(--color-ink);
+}
+.notes-sidebar-icon.is-active {
+  background: var(--color-pure-white);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-subtle);
+}
+
+/* Notes 画布排版：跟 Documents 统一 padding，max-width 不加（Notes 右栏本身就被侧栏挤住，加了反而推中间） */
+.notes-crepe .milkdown {
+  padding: 10px 32px 96px !important;
+  background: var(--color-pure-white);
+}
+.notes-crepe .milkdown .editor,
+.notes-crepe .milkdown .ProseMirror {
+  padding: 0 !important;
+}
+
+/* Notes 画布代码块去重（跟 Documents 同款规则） */
+.notes-crepe .milkdown-code-block {
   background: var(--color-fog) !important;
-  border-bottom: 1px solid rgba(163, 166, 175, 0.3) !important;
+  padding: 10px 14px !important;
+  border-radius: 6px !important;
+  margin: 12px 0 !important;
+  border: 0 !important;
+}
+.notes-crepe .milkdown-code-block .cm-editor,
+.notes-crepe .milkdown-code-block .cm-gutters,
+.notes-crepe .milkdown-code-block .cm-panel {
+  background: transparent !important;
+}
+.notes-crepe .milkdown-code-block .cm-gutters {
+  color: var(--color-dove) !important;
+  padding-right: 10px !important;
+}
+.notes-crepe .milkdown-code-block .cm-activeLineGutter,
+.notes-crepe .milkdown-code-block .cm-activeLine {
+  background: transparent !important;
+  color: var(--color-graphite) !important;
+}
+.notes-crepe .milkdown-code-block .language-picker {
+  display: none !important;
+}
+.notes-crepe .milkdown-code-block:has(.cm-editor.cm-focused) .language-picker {
+  display: block !important;
+}
+.notes-crepe .milkdown-code-block.selected {
+  outline: none !important;
+  border-left: 2px solid var(--color-rust) !important;
+  padding-left: 12px !important;
 }
 
 /* ============ sticky note floating window ============ */
@@ -672,6 +869,20 @@ body {
 .sticky-note-markdown code {
   border-radius: 5px !important;
   background: var(--color-fog) !important;
+}
+
+/* ============ 便利贴 Crepe 只读编辑器：左对齐 + 顶格，去掉 frame.css 默认居中 ============ */
+.sticky-crepe .milkdown {
+  display: block !important;
+  text-align: left !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+.sticky-crepe .milkdown .ProseMirror {
+  display: block !important;
+  padding: 0 !important;
+  text-align: left !important;
+  min-height: auto !important;
 }
 
 /* ============ utilities ============ */
