@@ -464,7 +464,7 @@ export function NotesPage() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-hidden" data-color-mode="light">
+            <div className="flex-1 min-h-0 overflow-hidden relative" data-color-mode="light">
               <MDEditor
                 key={activeNote.id}
                 value={contentDraft}
