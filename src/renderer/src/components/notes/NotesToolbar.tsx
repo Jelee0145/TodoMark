@@ -41,15 +41,17 @@ type BtnProps = {
   onClick: () => void
   active?: boolean
   highlight?: boolean
+  disabled?: boolean
   children: React.ReactNode
 }
 
-function Btn({ title, onClick, active, highlight, children }: BtnProps) {
+function Btn({ title, onClick, active, highlight, disabled, children }: BtnProps) {
   return (
     <button
       type="button"
       title={title}
       onClick={onClick}
+      disabled={disabled}
       className={`ntb-btn${active ? ' is-active' : ''}${highlight ? ' is-highlight' : ''}`}
     >
       {children}
@@ -61,9 +63,9 @@ function Divider() {
   return <span className="ntb-divider" aria-hidden="true" />
 }
 
-function TextBtn({ label, title, onClick, active }: { label: string; title: string; onClick: () => void; active?: boolean }) {
+function TextBtn({ label, title, onClick, active, disabled }: { label: string; title: string; onClick: () => void; active?: boolean; disabled?: boolean }) {
   return (
-    <button type="button" title={title} onClick={onClick} className={`ntb-text-btn${active ? ' is-active' : ''}`}>
+    <button type="button" title={title} onClick={onClick} disabled={disabled} className={`ntb-text-btn${active ? ' is-active' : ''}`}>
       {label}
     </button>
   )
@@ -137,7 +139,7 @@ function PromptModal({
   )
 }
 
-export function NotesToolbar({ crepeRef }: { crepeRef: React.MutableRefObject<Crepe | null> }) {
+export function NotesToolbar({ crepeRef, readOnly = false }: { crepeRef: React.MutableRefObject<Crepe | null>; readOnly?: boolean }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptKind>(null)
   const moreRef = useRef<HTMLDivElement>(null)
@@ -154,10 +156,12 @@ export function NotesToolbar({ crepeRef }: { crepeRef: React.MutableRefObject<Cr
   }, [moreOpen])
 
   const exec = (key: unknown, ...args: unknown[]) => {
+    if (readOnly) return
     runCommand(crepeRef, key, ...args)
   }
 
   const insertImageFromUrl = useCallback((url: string) => {
+    if (readOnly) return
     const trimmed = url.trim()
     if (!trimmed) return
     const crepe = crepeRef.current
@@ -165,9 +169,10 @@ export function NotesToolbar({ crepeRef }: { crepeRef: React.MutableRefObject<Cr
     crepe.editor.action((ctx) => {
       callCommand(ctx, insertImageCommand.key, { src: trimmed, alt: '' })
     })
-  }, [crepeRef])
+  }, [crepeRef, readOnly])
 
   const insertLinkFromUrl = useCallback((url: string) => {
+    if (readOnly) return
     const trimmed = url.trim()
     if (!trimmed) return
     const crepe = crepeRef.current
@@ -175,7 +180,7 @@ export function NotesToolbar({ crepeRef }: { crepeRef: React.MutableRefObject<Cr
     crepe.editor.action((ctx) => {
       callCommand(ctx, toggleLinkCommand.key, trimmed)
     })
-  }, [crepeRef])
+  }, [crepeRef, readOnly])
 
   const insertCode = () => exec(createCodeBlockCommand.key)
   const insertTable = () => exec(insertTableCommand.key)
@@ -203,32 +208,32 @@ export function NotesToolbar({ crepeRef }: { crepeRef: React.MutableRefObject<Cr
 
   return (
     <div className="ntb-root">
-      <Btn title="撤销" onClick={undo}><IconUndo /></Btn>
-      <Btn title="重做" onClick={redo}><IconRedo /></Btn>
+      <Btn title="撤销" onClick={undo} disabled={readOnly}><IconUndo /></Btn>
+      <Btn title="重做" onClick={redo} disabled={readOnly}><IconRedo /></Btn>
       <Divider />
-      <TextBtn label="H₁" title="一级标题" onClick={h1} />
-      <TextBtn label="H₂" title="二级标题" onClick={h2} />
-      <TextBtn label="H₃" title="三级标题" onClick={h3} />
+      <TextBtn label="H₁" title="一级标题" onClick={h1} disabled={readOnly} />
+      <TextBtn label="H₂" title="二级标题" onClick={h2} disabled={readOnly} />
+      <TextBtn label="H₃" title="三级标题" onClick={h3} disabled={readOnly} />
       <Divider />
-      <Btn title="加粗" onClick={bold}><IconBold /></Btn>
-      <Btn title="斜体" onClick={italic}><IconItalic /></Btn>
-      <Btn title="行内代码" onClick={code}><IconCode /></Btn>
-      <Btn title="删除线" onClick={strike}><IconStrike /></Btn>
+      <Btn title="加粗" onClick={bold} disabled={readOnly}><IconBold /></Btn>
+      <Btn title="斜体" onClick={italic} disabled={readOnly}><IconItalic /></Btn>
+      <Btn title="行内代码" onClick={code} disabled={readOnly}><IconCode /></Btn>
+      <Btn title="删除线" onClick={strike} disabled={readOnly}><IconStrike /></Btn>
       <Divider />
-      <Btn title="无序列表" onClick={bullet}><IconUl /></Btn>
-      <Btn title="有序列表" onClick={ordered}><IconOl /></Btn>
-      <Btn title="任务列表" onClick={task}><IconTask /></Btn>
-      <Btn title="引用" onClick={quote}><IconQuote /></Btn>
+      <Btn title="无序列表" onClick={bullet} disabled={readOnly}><IconUl /></Btn>
+      <Btn title="有序列表" onClick={ordered} disabled={readOnly}><IconOl /></Btn>
+      <Btn title="任务列表" onClick={task} disabled={readOnly}><IconTask /></Btn>
+      <Btn title="引用" onClick={quote} disabled={readOnly}><IconQuote /></Btn>
       <Divider />
-      <Btn title="插入图片" onClick={() => setPrompt('image')}><IconImage /></Btn>
+      <Btn title="插入图片" onClick={() => setPrompt('image')} disabled={readOnly}><IconImage /></Btn>
       <div className="ntb-more-wrap" ref={moreRef}>
-        <Btn title="更多" onClick={() => setMoreOpen((v) => !v)} highlight={moreOpen}><IconMore /></Btn>
+        <Btn title="更多" onClick={() => setMoreOpen((v) => !v)} highlight={moreOpen} disabled={readOnly}><IconMore /></Btn>
         {moreOpen && (
           <div className="ntb-more-menu" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => { setMoreOpen(false); setPrompt('link') }}><IconLink />链接</button>
-            <button type="button" onClick={() => { insertCode(); setMoreOpen(false) }}><IconCode />代码块</button>
-            <button type="button" onClick={() => { insertTable(); setMoreOpen(false) }}><IconTable />表格</button>
-            <button type="button" onClick={() => { insertHr(); setMoreOpen(false) }}><IconHr />分隔线</button>
+            <button type="button" disabled={readOnly} onClick={() => { setMoreOpen(false); setPrompt('link') }}><IconLink />链接</button>
+            <button type="button" disabled={readOnly} onClick={() => { insertCode(); setMoreOpen(false) }}><IconCode />代码块</button>
+            <button type="button" disabled={readOnly} onClick={() => { insertTable(); setMoreOpen(false) }}><IconTable />表格</button>
+            <button type="button" disabled={readOnly} onClick={() => { insertHr(); setMoreOpen(false) }}><IconHr />分隔线</button>
           </div>
         )}
       </div>

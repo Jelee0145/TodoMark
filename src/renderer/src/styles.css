@@ -160,12 +160,7 @@ body {
   margin: 0 auto;
   padding: 28px 32px 96px;
   background: var(--color-pure-white);
-}
-.document-crepe--wide .milkdown {
   max-width: 880px;
-}
-.document-crepe--narrow .milkdown {
-  max-width: 720px;
 }
 .document-crepe .ProseMirror {
   min-height: calc(100vh - 260px);
@@ -760,6 +755,11 @@ body {
   background: var(--color-pure-white);
   color: var(--color-ink);
   box-shadow: var(--shadow-subtle);
+}
+
+/* Documents 工具栏嵌在 h-14 操作栏里，自身不再画 border-bottom（外层行有） */
+.documents-action-row > .ntb-root {
+  border-bottom: 0 !important;
 }
 
 /* Notes 画布排版：跟 Documents 统一 padding，max-width 不加（Notes 右栏本身就被侧栏挤住，加了反而推中间） */

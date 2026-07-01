@@ -7,6 +7,7 @@ import { Icon } from '@renderer/components/ui/Icon'
 import { LogoMark } from '@renderer/components/ui/LogoMark'
 import { Modal } from '@renderer/components/ui/Modal'
 import { WindowControls } from '@renderer/components/ui/WindowControls'
+import { NotesToolbar } from '@renderer/components/notes/NotesToolbar'
 import type {
   DocumentExternalChange,
   ExternalChangeConflict,
@@ -21,20 +22,21 @@ interface OpenDocument {
   saveState: SaveState
   error?: string
   revision: number
+  editMode: boolean
 }
 
 function MilkdownEditor({
   path,
   content,
   readOnly,
-  layout,
-  onChange
+  onChange,
+  crepeRef
 }: {
   path: string
   content: string
   readOnly: boolean
-  layout: 'wide' | 'narrow'
   onChange: (markdown: string) => void
+  crepeRef: React.MutableRefObject<Crepe | null>
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const onChangeRef = useRef(onChange)
@@ -51,8 +53,8 @@ function MilkdownEditor({
         [Crepe.Feature.Latex]: true,
         [Crepe.Feature.Table]: true,
         [Crepe.Feature.BlockEdit]: false,
-        [Crepe.Feature.Toolbar]: true,
-        [Crepe.Feature.TopBar]: true
+        [Crepe.Feature.Toolbar]: false,
+        [Crepe.Feature.TopBar]: false
       },
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: '开始写作…' },
@@ -67,9 +69,12 @@ function MilkdownEditor({
         if (!disposed && markdown !== previousMarkdown) onChangeRef.current(markdown)
       })
     })
-    void crepe.create()
+    void crepe.create().then(() => {
+      if (!disposed) crepeRef.current = crepe
+    })
     return () => {
       disposed = true
+      crepeRef.current = null
       void crepe.destroy()
     }
     // `content` is the mount-time document value; live changes flow through markdownUpdated.
@@ -80,7 +85,7 @@ function MilkdownEditor({
   return (
     <div
       ref={rootRef}
-      className={`document-crepe document-crepe--${layout} h-full overflow-y-auto`}
+      className="document-crepe h-full overflow-y-auto"
     />
   )
 }
@@ -149,10 +154,10 @@ export function DocumentsPage() {
   const [activePath, setActivePath] = useState<string | null>(null)
   const [conflict, setConflict] = useState<ExternalChangeConflict | null>(null)
   const [externalChange, setExternalChange] = useState<DocumentExternalChange | null>(null)
-  const [wideMode, setWideMode] = useState(true)
   const [renameOpen, setRenameOpen] = useState(false)
   const [tagsOpen, setTagsOpen] = useState(false)
   const saveTimers = useRef(new Map<string, number>())
+  const crepeRef = useRef<Crepe | null>(null)
   const openDocumentsRef = useRef(openDocuments)
   openDocumentsRef.current = openDocuments
 
@@ -176,7 +181,8 @@ export function DocumentsPage() {
           content: result.content,
           savedContent: result.content,
           saveState: 'idle',
-          revision: 0
+          revision: 0,
+          editMode: false
         }
       ])
       setActivePath(result.document.path)
@@ -410,7 +416,8 @@ export function DocumentsPage() {
                 content: result.content,
                 savedContent: result.content,
                 saveState: 'idle',
-                revision: item.revision + 1
+                revision: item.revision + 1,
+                editMode: false
               }
             : item
         )
@@ -485,53 +492,66 @@ export function DocumentsPage() {
 
         {active ? (
           <>
-            <div className="h-14 shrink-0 flex items-center gap-2.5 px-6 border-b border-dove/25 bg-pure-white">
-              <span className={`text-[11px] ${active.saveState === 'error' || active.saveState === 'conflict' ? 'text-rust' : 'text-graphite'}`}>
-                {active.document.readOnly ? '只读' : saveLabel(active.saveState)}
-              </span>
-              {active.error && (
-                <span className="text-[11px] text-rust truncate max-w-[200px]" title={active.error}>
-                  {active.error}
+            <div className="documents-action-row shrink-0 flex items-center border-b border-dove/25 bg-pure-white">
+              <NotesToolbar crepeRef={crepeRef} readOnly={active.document.readOnly} />
+              <div className="flex-1 min-w-0 flex items-center gap-2.5 px-3 h-14">
+                <span className={`shrink-0 text-[11px] ${active.saveState === 'error' || active.saveState === 'conflict' ? 'text-rust' : 'text-graphite'}`}>
+                  {active.document.readOnly ? '只读' : saveLabel(active.saveState)}
                 </span>
-              )}
-              {active.document.tags.length > 0 && (
-                <div className="flex items-center gap-1.5 ml-1">
-                  {active.document.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="rounded-full bg-fog px-2.5 py-0.5 text-[10px] text-graphite"
-                    >
-                      #{tag.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="flex-1" />
-              <Button size="sm" variant="link" onClick={() => setTagsOpen(true)}>
-                <Icon name="pin" size={12} strokeWidth={1.7} />标签
-              </Button>
-              <Button size="sm" variant="link" onClick={() => setRenameOpen(true)}>
-                <Icon name="edit" size={12} strokeWidth={1.7} />重命名
-              </Button>
-              <Button size="sm" variant="link" onClick={moveActive}>
-                <Icon name="layers" size={12} strokeWidth={1.7} />移动
-              </Button>
-              <Button
-                size="sm"
-                variant="link"
-                onClick={() => setWideMode((value) => !value)}
-                title={wideMode ? '切换到窄屏阅读' : '切换到宽屏编辑'}
-              >
-                <Icon
-                  name={wideMode ? 'unmaximize' : 'maximize'}
-                  size={12}
-                  strokeWidth={1.7}
-                />
-                {wideMode ? '窄屏' : '宽屏'}
-              </Button>
-              <Button size="sm" variant="link" onClick={deleteActive} className="text-rust">
-                <Icon name="trash" size={12} strokeWidth={1.7} />删除
-              </Button>
+                {active.error && (
+                  <span className="shrink-0 text-[11px] text-rust truncate max-w-[200px]" title={active.error}>
+                    {active.error}
+                  </span>
+                )}
+                {active.document.tags.length > 0 && (
+                  <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+                    {active.document.tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="rounded-full bg-fog px-2.5 py-0.5 text-[10px] text-graphite whitespace-nowrap"
+                      >
+                        #{tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex-1" />
+                <Button size="sm" variant="link" onClick={() => setTagsOpen(true)}>
+                  <Icon name="pin" size={12} strokeWidth={1.7} />标签
+                </Button>
+                <Button size="sm" variant="link" onClick={() => setRenameOpen(true)}>
+                  <Icon name="edit" size={12} strokeWidth={1.7} />重命名
+                </Button>
+                <Button size="sm" variant="link" onClick={moveActive}>
+                  <Icon name="layers" size={12} strokeWidth={1.7} />移动
+                </Button>
+                {!active.document.readOnly && (
+                  <Button
+                    size="sm"
+                    variant="link"
+                    onClick={() => {
+                      setOpenDocuments((items) =>
+                        items.map((item) =>
+                          item.document.path === active.document.path
+                            ? { ...item, editMode: !item.editMode }
+                            : item
+                        )
+                      )
+                    }}
+                    title={active.editMode ? '切换为只读' : '开始编辑'}
+                  >
+                    <Icon
+                      name={active.editMode ? 'check' : 'edit'}
+                      size={12}
+                      strokeWidth={1.7}
+                    />
+                    {active.editMode ? '完成' : '编辑'}
+                  </Button>
+                )}
+                <Button size="sm" variant="link" onClick={deleteActive} className="text-rust">
+                  <Icon name="trash" size={12} strokeWidth={1.7} />删除
+                </Button>
+              </div>
             </div>
             {(externalChange?.path === active.document.path || conflict?.path === active.document.path) && (
               <div className="flex items-center gap-3 bg-apricot-wash px-6 py-2 text-[12px] text-rust">
@@ -557,11 +577,11 @@ export function DocumentsPage() {
             )}
             <div className="flex-1 min-h-0 bg-pure-white">
               <MilkdownEditor
-                key={`${active.document.path}:${active.revision}`}
+                key={`${active.document.path}:${active.revision}:${active.editMode ? 1 : 0}`}
                 path={active.document.path}
                 content={active.content}
-                readOnly={active.document.readOnly}
-                layout={wideMode ? 'wide' : 'narrow'}
+                readOnly={active.document.readOnly || !active.editMode}
+                crepeRef={crepeRef}
                 onChange={(content) => {
                   setOpenDocuments((items) =>
                     items.map((item) =>

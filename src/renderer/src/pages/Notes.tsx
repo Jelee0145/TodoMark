@@ -15,6 +15,7 @@ import { ipc } from '@renderer/lib/ipc'
 import { toDateIso } from '@renderer/lib/format'
 
 const STORAGE_KEY = 'notes.panelWidths'
+const SIDEBAR_COLLAPSED_KEY = 'notes.sidebarCollapsed'
 const DEFAULT_W = { sidebar: 220, list: 320 }
 const MIN = { sidebar: 160, list: 220 }
 const MAX = { sidebar: 360, list: 560 }
@@ -33,6 +34,16 @@ function loadWidths(): { sidebar: number; list: number } {
     /* ignore */
   }
   return DEFAULT_W
+}
+
+function loadSidebarCollapsed(): boolean {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    if (raw === null) return true
+    return raw === '1'
+  } catch {
+    return true
+  }
 }
 
 function MilkdownEditor({
@@ -111,7 +122,15 @@ export function NotesPage() {
   const widthsRef = useRef(widths)
   widthsRef.current = widths
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState(loadSidebarCollapsed)
+  const setSidebarCollapsed = (next: boolean) => {
+    setSidebarCollapsedState(next)
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     loadGroups()
