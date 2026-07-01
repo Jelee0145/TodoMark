@@ -5,6 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   main: {
+    build: {
+      outDir: resolve(__dirname, 'dist/main')
+    },
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
@@ -13,17 +16,21 @@ export default defineConfig({
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      outDir: resolve(__dirname, 'dist/preload'),
       rollupOptions: {
         output: {
           entryFileNames: '[name].cjs',
           format: 'cjs'
         }
       }
-    }
+    },
+    plugins: [externalizeDepsPlugin()]
   },
   renderer: {
+    build: {
+      outDir: resolve(__dirname, 'dist/renderer')
+    },
     publicDir: resolve(__dirname, 'src/renderer/public'),
     resolve: {
       alias: {

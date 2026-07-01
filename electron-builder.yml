@@ -5,7 +5,10 @@ directories:
   output: dist
   buildResources: resources
 files:
-  - out/**/*
+  - dist/main/**/*
+  - dist/preload/**/*
+  - dist/renderer/**/*
+  - package.json
   - package.json
 extraResources:
   - from: resources/icon.png
